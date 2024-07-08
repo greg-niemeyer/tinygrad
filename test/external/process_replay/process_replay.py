@@ -3,6 +3,10 @@
 import difflib, pickle, multiprocessing, os
 from tinygrad.codegen.kernel import Kernel
 from tinygrad.helpers import Context, ContextVar, colored, db_connection, VERSION, getenv, tqdm
+from process_replay_test_generator import generate_test_script
+
+from time import time
+tests = []
 
 page_size = 100
 table_name = f"process_replay_{getenv('GITHUB_RUN_ID', 'HEAD')}_{VERSION}"
@@ -13,13 +17,14 @@ def process_replay(offset:int):
   cur = conn.cursor()
   cur.execute(f"SELECT val FROM '{table_name}' LIMIT ? OFFSET ?", (page_size, offset))
   for row in cur.fetchall():
-    ast, opts, applied_opts, name, compare_src, ctx = pickle.loads(row[0])
+    ast, opts, applied_opts, compare_uops, name, compare_src, ctx = pickle.loads(row[0])
     with Context(**{k:v for k,v in ctx.items() if k in ContextVar._cache}):
       # try linearize
       try:
         k = Kernel(ast, opts=opts)
         for opt in applied_opts: k.apply_opt(opt)
         good_src = k.opts.render(name, k.linearize().uops)
+        good_uops = str(k.uops)
       except Exception as e:
         print("FAILED TO RECREATE KERNEL")
         print(ast)
@@ -33,10 +38,16 @@ def process_replay(offset:int):
         print("PROCESS REPLAY DETECTED CHANGE")
         print(ast)
         print(applied_opts)
+        tests.append((ast, applied_opts))
+        diff = list(difflib.unified_diff(good_uops.splitlines(), compare_uops.splitlines()))
+        for line in diff:
+          print(colored(line, "red" if line.startswith("-") else "green" if line.startswith("+") else None))
+        if getenv("ASSERT_PROCESS_REPLAY", 1): raise e
         diff = list(difflib.unified_diff(good_src.splitlines(), compare_src.splitlines()))
         for line in diff:
           print(colored(line, "red" if line.startswith("-") else "green" if line.startswith("+") else None))
         if ASSERT_PROCESS_REPLAY: raise e
+  if len(tests): generate_test_script(tests, f"process_replay_{int(time()):08d}.py")
   conn.commit()
   cur.close()
 
