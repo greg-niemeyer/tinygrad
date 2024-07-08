@@ -546,6 +546,9 @@ class UOpGraph:
       formatted_parents = [self.uops.index(x) if x.op is not UOps.CONST else f"{x.arg}" for x in u.src]
       print(f"{i:4d} {str(u.op):20s}: {str(u.dtype) if u.dtype is not None else '':25s} " f"{str(formatted_parents):32s} {u.arg}")
 
+  def __str__(self):
+    return "\n".join([f"{i:4d} {str(u.op):20s}: {str(u.dtype) if u.dtype is not None else '':25s} {str([self.uops.index(x) for x in u.src]):32s} {u.arg}" for i,u in enumerate(self)]) # noqa: E501
+
   cnt = 0
   def linearize(self, extra_pm:Optional[PatternMatcher]=None):
     global acc_number
