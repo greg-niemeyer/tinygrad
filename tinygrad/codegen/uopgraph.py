@@ -197,6 +197,7 @@ def fix_image_idx(ls:UOp):
   image_idx = UOp(UOps.VECTORIZE, cast(DType, idxy.dtype).vec(2), (idx, idy))
   if ls.op is UOps.LOAD and cast(DType, ls.dtype).count == 1:
     cconst = (UOp(UOps.VECTORIZE, cast(DType, ls.dtype).vec(4), src=(ls.src[3], ls.src[3], ls.src[3], ls.src[3])),) if len(ls.src) >= 3 else ()
+    #cconst = (UOp(UOps.CONST, cast(DType, ls.dtype).vec(4), arg=ls.src[3].arg),) if len(ls.src) >= 3 else ()
     loaded = UOp(ls.op, cast(DType, ls.dtype).vec(4), (ls.src[0], image_idx) + ls.src[2:3] + cconst, ls.arg)
     subidx = idxy%4
     ret = UOp.const(ls.dtype, 0)
