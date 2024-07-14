@@ -211,18 +211,25 @@ def cast_reduce(cst):
   red = UOp(UOps.VECTORIZE, cst.dtype, tuple(x.src[0] for x in cst.src))
   return UOp(UOps.REDUCE, red.dtype, (red,) + fst_red.src[1:], fst_red.arg)
 
+def log_match(id: str, func):
+    def wrapper(*args, **kwargs):
+        print(f"Matched pattern: {id}")
+        #if id == 'fold_gated_load_false': import pdb; pdb.set_trace()
+        return func(*args, **kwargs)
+    return wrapper
+
 contractor = PatternMatcher([
   # contracts
-  (UPat(UOps.CONTRACT, name="root"), replace_contract),
+  (UPat(UOps.CONTRACT, name="root"), log_match("contract", replace_contract)),
   # VECTORIZE after REDUCEs -> one REDUCE (breaks TestConv.test_two_binops_no_rerun)
-  (UPat(UOps.VECTORIZE, name="cst", src=UPat(UOps.REDUCE)), cast_reduce),
+  (UPat(UOps.VECTORIZE, name="cst", src=UPat(UOps.REDUCE)), log_match("vectorize_reduce", cast_reduce)),
 ])
 
 reducer = PatternMatcher([
-  (UPat(UOps.REDUCE, name="root"), replace_reduce),
-  (UPat(UOps.WMMA, name="wmma"), expand_wmma),
+  (UPat(UOps.REDUCE, name="root"), log_match("reduce", replace_reduce)),
+  (UPat(UOps.WMMA, name="wmma"), log_match("wmma", expand_wmma)),
   # image indexing. TODO: why can't this just go after the float stuff?
-  (UPat({UOps.LOAD, UOps.STORE}, name="ls"), fix_image_idx),
+  (UPat({UOps.LOAD, UOps.STORE}, name="ls"), log_match("image_indexing", fix_image_idx)),
 ])
 
 # ***** float4 handling *****
@@ -258,37 +265,37 @@ def no_float4_alu(alu):
 float4_folding = PatternMatcher([
   (UOp(UOps.STORE, dtype=dtypes.float, src=(UOp.var("buf"), UOp.var("idx")+
     (UOp(UOps.EXPAND, src=tuple(UOp.const(dtypes.int, i) for i in range(4))).name("ex")+UOp.var("idx2")), UOp.var("var"))).name("store"),
-    lambda buf, store, idx, idx2, ex, var: UOp(UOps.STORE, store.dtype, (buf, idx+idx2+ex, var), store.arg)),
+    log_match("float4_store", lambda buf, store, idx, idx2, ex, var: UOp(UOps.STORE, store.dtype, (buf, idx+idx2+ex, var), store.arg))),
   # float(2,4) load
   (UOp(UOps.LOAD, dtype=dtypes.float, src=(UOp.var("buf"),
     UOp(UOps.EXPAND).name("ex")+UOp.var("idx")+UOp.var("idx2"))).name("load"),
-    float4_expand_load),
+    log_match("float4_load_1", float4_expand_load)),
   (UOp(UOps.LOAD, dtype=dtypes.float, src=(UOp.var("buf"),
-    UOp(UOps.EXPAND).name("ex")+UOp.var("idx"))).name("load"), float4_expand_load),
+    UOp(UOps.EXPAND).name("ex")+UOp.var("idx"))).name("load"), log_match("float4_load_2", float4_expand_load)),
   (UOp(UOps.LOAD, dtype=dtypes.float, src=(UOp.var("buf"),
-    UOp(UOps.EXPAND).name("ex"))).name("load"), float4_expand_load),
+    UOp(UOps.EXPAND).name("ex"))).name("load"), log_match("float4_load_3", float4_expand_load)),
   # float(2,4) store
   # TODO: fold ADDs into one UOp and remove add chains
   (UOp(UOps.STORE, src=(UOp.var("buf"),
     UOp(UOps.EXPAND).name("ex")+UOp.var("idx")+UOp.var("idx2")+UOp.var("idx3"), UOp.var("var"))).name("store_allow_any_len"),
-    float4_contract_store),
+    log_match("float4_store_1", float4_contract_store)),
   (UOp(UOps.STORE, src=(UOp.var("buf"),
     UOp(UOps.EXPAND).name("ex")+UOp.var("idx")+UOp.var("idx2"), UOp.var("var"))).name("store_allow_any_len"),
-    float4_contract_store),
+    log_match("float4_store_2", float4_contract_store)),
   (UOp(UOps.STORE, src=(UOp.var("buf"),
-    UOp(UOps.EXPAND).name("ex")+UOp.var("idx"), UOp.var("var"))).name("store_allow_any_len"), float4_contract_store),
+    UOp(UOps.EXPAND).name("ex")+UOp.var("idx"), UOp.var("var"))).name("store_allow_any_len"), log_match("float4_store_3", float4_contract_store)),
   (UOp(UOps.STORE, src=(UOp.var("buf"),
-    UOp(UOps.EXPAND).name("ex"), UOp.var("var"))).name("store_allow_any_len"), float4_contract_store),
+    UOp(UOps.EXPAND).name("ex"), UOp.var("var"))).name("store_allow_any_len"), log_match("float4_store_4", float4_contract_store)),
   # no ALU on float4 (float4 constructor doesn't work in METAL/GPU)
-  (UPat(UOps.ALU, name="alu"), no_float4_alu),
+  (UPat(UOps.ALU, name="alu"), log_match("no_float4_alu", no_float4_alu)),
 ])
 
 # ***** transcendental *****
 
 transcendental_folding = PatternMatcher([
-  (UPat(UOps.ALU, dtype=TRANSCENDENTAL_SUPPORTED_DTYPES, src=(UPat(name="x"),), arg=UnaryOps.EXP2), xexp2),
-  (UPat(UOps.ALU, dtype=TRANSCENDENTAL_SUPPORTED_DTYPES, src=(UPat(name="d"),), arg=UnaryOps.LOG2), xlog2),
-  (UPat(UOps.ALU, dtype=TRANSCENDENTAL_SUPPORTED_DTYPES, src=(UPat(name="d"),), arg=UnaryOps.SIN), xsin),
+  (UPat(UOps.ALU, dtype=TRANSCENDENTAL_SUPPORTED_DTYPES, src=(UPat(name="x"),), arg=UnaryOps.EXP2), log_match("exp2", xexp2)),
+  (UPat(UOps.ALU, dtype=TRANSCENDENTAL_SUPPORTED_DTYPES, src=(UPat(name="d"),), arg=UnaryOps.LOG2), log_match("log2", xlog2)),
+  (UPat(UOps.ALU, dtype=TRANSCENDENTAL_SUPPORTED_DTYPES, src=(UPat(name="d"),), arg=UnaryOps.SIN), log_match("sin", xsin)),
 ])
 
 # ***** threefry *****
@@ -334,161 +341,203 @@ def loop_collapse(loop_start, loop_end, compval, idx, mval, multconst, rng):
 constant_folder = PatternMatcher([
   # bigint is rewritten to int32
   (UPat({UOps.CONST, UOps.ALU, UOps.SPECIAL, UOps.RANGE, UOps.EXPAND}, dtype=dtypes.bigint, name="x"),
-   lambda x: UOp(x.op, dtypes.int32, x.src, x.arg)),
+   log_match("bigint_to_int32", lambda x: UOp(x.op, dtypes.int32, x.src, x.arg))),
   # VECTORIZE/GEP
-  (UOp(UOps.GEP, src=(UOp(UOps.VECTORIZE).name("cast"),)).name("gep"), lambda gep, cast: cast.src[gep.arg]),
-  (UOp(UOps.VECTORIZE, dtypes.float.vec(2), tuple(UOp(UOps.GEP, dtypes.float, src=(UOp.var('x'),), arg=i) for i in range(2))), lambda x: x),
-  (UOp(UOps.VECTORIZE, dtypes.float.vec(4), tuple(UOp(UOps.GEP, dtypes.float, src=(UOp.var('x'),), arg=i) for i in range(4))), lambda x: x),
-  (UOp(UOps.VECTORIZE, dtypes.float.vec(8), tuple(UOp(UOps.GEP, dtypes.float, src=(UOp.var('x'),), arg=i) for i in range(8))), lambda x: x),
+  (UOp(UOps.GEP, src=(UOp(UOps.VECTORIZE).name("cast"),)).name("gep"), log_match("gep_vectorize", lambda gep, cast: cast.src[gep.arg])),
+  (UOp(UOps.VECTORIZE, dtypes.float.vec(2), tuple(UOp(UOps.GEP, dtypes.float, src=(UOp.var('x'),), arg=i) for i in range(2))), log_match("vectorize_float2", lambda x: x)),
+  (UOp(UOps.VECTORIZE, dtypes.float.vec(4), tuple(UOp(UOps.GEP, dtypes.float, src=(UOp.var('x'),), arg=i) for i in range(4))), log_match("vectorize_float4", lambda x: x)),
+  (UOp(UOps.VECTORIZE, dtypes.float.vec(8), tuple(UOp(UOps.GEP, dtypes.float, src=(UOp.var('x'),), arg=i) for i in range(8))), log_match("vectorize_float8", lambda x: x)),
   # tensor core with a 0 input is acc
-  (UOp(UOps.WMMA, src=(UOp.const(None, 0.0), UOp.var(), UOp.var('acc'))), lambda acc: acc),
-  (UOp(UOps.WMMA, src=(UOp.var(), UOp.const(None, 0.0), UOp.var('acc'))), lambda acc: acc),
+  (UOp(UOps.WMMA, src=(UOp.const(None, 0.0), UOp.var(), UOp.var('acc'))), log_match("wmma_zero_input", lambda acc: acc)),
+  (UOp(UOps.WMMA, src=(UOp.var(), UOp.const(None, 0.0), UOp.var('acc'))), log_match("wmma_zero_input_2", lambda acc: acc)),
   # tensor core cleanups
   (UOp(UOps.REDUCE, src=(UOp(UOps.EXPAND, src=tuple(UOp(UOps.GEP, dtypes.float, src=(UOp.var('x'),), arg=i) for i in range(2))).name("expand"),))
-   .name("reduce_allow_any_len"), reduce_before_expand),
+   .name("reduce_allow_any_len"), log_match("reduce_expand_2", reduce_before_expand)),
   (UOp(UOps.REDUCE, src=(UOp(UOps.EXPAND, src=tuple(UOp(UOps.GEP, dtypes.float, src=(UOp.var('x'),), arg=i) for i in range(8))).name("expand"),))
-   .name("reduce_allow_any_len"), reduce_before_expand),
+   .name("reduce_allow_any_len"), log_match("reduce_expand_8", reduce_before_expand)),
   (UOp.var("add") + UOp(UOps.WMMA).name("wmma"),
-    lambda add, wmma: UOp(wmma.op, wmma.dtype, (wmma.src[0], wmma.src[1], wmma.src[2]+add), wmma.arg)),
+    log_match("wmma_add", lambda add, wmma: UOp(wmma.op, wmma.dtype, (wmma.src[0], wmma.src[1], wmma.src[2]+add), wmma.arg))),
   # threefry
-  (UOp(UOps.ALU, dtype=dtypes.uint64, src=(UOp.var("x"), UOp.var("seed")), arg=BinaryOps.THREEFRY), threefry2x32),
+  (UOp(UOps.ALU, dtype=dtypes.uint64, src=(UOp.var("x"), UOp.var("seed")), arg=BinaryOps.THREEFRY), log_match("threefry", threefry2x32)),
   # arange loop folding (early)
   (UPat(UOps.ALU, TernaryOps.WHERE, src=(UPat(UOps.ALU, BinaryOps.CMPLT, src=(
     UPat(UOps.ALU, BinaryOps.ADD, src=[UPat(name="idx"), UPat(UOps.ALU, BinaryOps.MUL, src=[UPat(UOps.CONST, name="mval"),
       UPat(UOps.RANGE, name="rng", src=(UPat(name="loop_start"), UPat(name="loop_end")))])]),
-      UPat(UOps.CONST, name="compval"))), UPat(UOps.CONST, name="multconst"), UPat(UOps.CONST, 0))), loop_collapse),
+      UPat(UOps.CONST, name="compval"))), UPat(UOps.CONST, name="multconst"), UPat(UOps.CONST, 0))),
+   log_match("arange_loop_folding_early", lambda idx, mval, rng, loop_start, loop_end, compval, multconst:
+             loop_collapse(loop_start=loop_start, loop_end=loop_end, compval=compval, idx=idx, mval=mval, multconst=multconst, rng=rng))),
   (UPat(UOps.ALU, TernaryOps.WHERE, src=(UPat(UOps.ALU, BinaryOps.CMPLT, src=(
     UPat(UOps.ALU, BinaryOps.ADD, src=[UPat(name="idx"), UPat(UOps.ALU, UnaryOps.NEG, src=[
       UPat(UOps.RANGE, name="rng", src=(UPat(name="loop_start"), UPat(name="loop_end")))])]),
       UPat(UOps.CONST, name="compval"))), UPat(UOps.CONST, name="multconst"), UPat(UOps.CONST, 0))),
-      lambda **kwargs: loop_collapse(mval=UOp.const(dtypes.int, -1), **kwargs)),
+   log_match("arange_loop_folding_early_neg", lambda idx, rng, loop_start, loop_end, compval, multconst:
+             loop_collapse(mval=UOp.const(dtypes.int, -1), loop_start=loop_start, loop_end=loop_end, compval=compval, idx=idx, multconst=multconst, rng=rng))),
   # sum collapse to mul (with possible GEP)
   (UPat(UOps.PHI, src=(UPat(UOps.DEFINE_ACC, name="phi_input", src=[UPat(UOps.CONST), UPat(UOps.RANGE, name="loop")]),
-                       UPat(UOps.ALU, BinaryOps.ADD, src=(UPat(name="val1"), UPat(name="val2"))))), sum_collapse),
+                       UPat(UOps.ALU, BinaryOps.ADD, src=(UPat(name="val1"), UPat(name="val2"))))),
+   log_match("sum_collapse_to_mul", lambda phi_input, loop, val1, val2: sum_collapse(phi_input, loop, val1, val2))),
   (UPat(UOps.PHI, src=(UPat(UOps.GEP, name="phi_input", src=(UPat(UOps.DEFINE_ACC, src=[UPat(UOps.CONST), UPat(UOps.RANGE, name="loop")]),)),
-                       UPat(UOps.ALU, BinaryOps.ADD, src=(UPat(name="val1"), UPat(name="val2"))))), sum_collapse),
+                       UPat(UOps.ALU, BinaryOps.ADD, src=(UPat(name="val1"), UPat(name="val2"))))),
+   log_match("sum_collapse_to_mul_gep", lambda phi_input, loop, val1, val2: sum_collapse(phi_input, loop, val1, val2))),
   # deal with UNMUL
   (UPat(UOps.ALU, BinaryOps.MUL, [UPat(UOps.CONST, name="c1"), UPat(UOps.UNMUL, src=[UPat(UOps.CONST, name="c2"), UPat(name="v")])]),
-   lambda c1,c2,v: v if c1.arg == c2.arg else None),
-  (UOp(UOps.UNMUL, src=(UOp.const(None, 0).name('zero'), UOp.var())), lambda zero: zero),
-  (UOp(UOps.UNMUL).name('unmul').cast().name('root'), lambda root,unmul: UOp(UOps.UNMUL, root.dtype, (unmul.src[0].cast(root.dtype), unmul.src[1]))),
+   log_match("deal_with_unmul", lambda c1, c2, v: v if c1.arg == c2.arg else None)),
+  (UOp(UOps.UNMUL, src=(UOp.const(None, 0).name('zero'), UOp.var())),
+   log_match("unmul_zero", lambda zero: zero)),
+  (UOp(UOps.UNMUL).name('unmul').cast().name('root'),
+   log_match("unmul_cast", lambda root, unmul: UOp(UOps.UNMUL, root.dtype, (unmul.src[0].cast(root.dtype), unmul.src[1])))),
   # indexing (with a multiply offset)!
   (UOp.var('idx').eq(UOp(UOps.RANGE).name("rng")).where(
     UOp(UOps.LOAD, src=(UOp.var("buf"), UOp.var('add')+UOp.var('mul')*UOp(UOps.RANGE).name("rng"))).name("ld"), UOp.const(None, 0.0)),
-    lambda idx,rng,buf,add,mul,ld: UOp(UOps.UNMUL, ld.dtype, (UOp(ld.op, ld.dtype, (buf, add+mul*idx)), rng.src[1]-rng.src[0]))),
+   log_match("indexing_with_multiply_offset", lambda idx, rng, buf, add, mul, ld:
+             UOp(UOps.UNMUL, ld.dtype, (UOp(ld.op, ld.dtype, (buf, add+mul*idx)), rng.src[1]-rng.src[0])))),
   # other arange folders
-  (UOp.cvar("c1") - (UOp.var("x") + UOp.cvar("c2")), lambda c1, c2, x: (c1-c2)-x),  # c1 - (x + c2) -> (c1-c2) - x
+  (UOp.cvar("c1") - (UOp.var("x") + UOp.cvar("c2")),
+   log_match("other_arange_folder", lambda c1, c2, x: (c1-c2)-x)),  # c1 - (x + c2) -> (c1-c2) - x
   # max on special can go away (TODO: special should be variable, same thing applies)
-  (UOp.max(UOp.cvar('c'), UOp(UOps.SPECIAL).name('s')), lambda c,s: c if (s.arg[2]-1) <= c.arg else None),
-  (UOp.max(UOp.cvar('c'), UOp(UOps.SPECIAL).name('s')+UOp.cvar('c2')), lambda c,s,c2: (s+c2) if 0 >= c.arg else None),  # TODO: generic
-  (UOp.max(UOp.cvar('c'), -(UOp(UOps.SPECIAL).name('s')+UOp.cvar('c2'))), lambda c,s,c2: -(s+c2) if -(s.arg[2]-1+c2.arg) >= c.arg else None),
+  (UOp.max(UOp.cvar('c'), UOp(UOps.SPECIAL).name('s')),
+   log_match("max_on_special_1", lambda c, s: c if (s.arg[2]-1) <= c.arg else None)),
+  (UOp.max(UOp.cvar('c'), UOp(UOps.SPECIAL).name('s')+UOp.cvar('c2')),
+   log_match("max_on_special_2", lambda c, s, c2: (s+c2) if 0 >= c.arg else None)),  # TODO: generic
+  (UOp.max(UOp.cvar('c'), -(UOp(UOps.SPECIAL).name('s')+UOp.cvar('c2'))),
+   log_match("max_on_special_3", lambda c, s, c2: -(s+c2) if -(s.arg[2]-1+c2.arg) >= c.arg else None)),
   # max on range can go away (ugh: copy of SPECIAL, and with/without const)
-  (UOp.max(UOp.cvar('c'), UOp(UOps.RANGE).name('s')), lambda c,s: s if s.src[0].arg >= c.arg else None),  # TODO: generic
-  (UOp.max(UOp.cvar('c'), UOp(UOps.RANGE).name('s')+UOp.cvar('c2')), lambda c,s,c2: (s+c2) if s.src[0].arg >= c.arg else None),  # TODO: generic
-  (UOp.max(UOp.cvar('c'), -(UOp(UOps.RANGE).name('s'))), lambda c,s: -s if -(s.src[1].arg-1) >= c.arg else None),
-  (UOp.max(UOp.cvar('c'), -(UOp(UOps.RANGE).name('s')+UOp.cvar('c2'))), lambda c,s,c2: -(s+c2) if -(s.src[1].arg-1+c2.arg) >= c.arg else None),
+  (UOp.max(UOp.cvar('c'), UOp(UOps.RANGE).name('s')),
+   log_match("max_on_range_1", lambda c, s: s if s.src[0].arg >= c.arg else None)),  # TODO: generic
+  (UOp.max(UOp.cvar('c'), UOp(UOps.RANGE).name('s')+UOp.cvar('c2')),
+   log_match("max_on_range_2", lambda c, s, c2: (s+c2) if s.src[0].arg >= c.arg else None)),  # TODO: generic
+  (UOp.max(UOp.cvar('c'), -(UOp(UOps.RANGE).name('s'))),
+   log_match("max_on_range_3", lambda c, s: -s if -(s.src[1].arg-1) >= c.arg else None)),
+  (UOp.max(UOp.cvar('c'), -(UOp(UOps.RANGE).name('s')+UOp.cvar('c2'))),
+   log_match("max_on_range_4", lambda c, s, c2: -(s+c2) if -(s.src[1].arg-1+c2.arg) >= c.arg else None)),
   # const rules
-  (UPat(UOps.GEP, name="root", src=(UPat(UOps.CONST, name="c"),)), lambda root, c: UOp.const(root.dtype, c.arg)),
-  (UPat(UOps.CAST, name="root", src=UPat(UOps.CONST, name="c")), lambda root, c: UOp.const(root.dtype, c.arg)),
+  (UPat(UOps.GEP, name="root", src=(UPat(UOps.CONST, name="c"),)),
+   log_match("const_rule_1", lambda root, c: UOp.const(root.dtype, c.arg))),
+  (UPat(UOps.CAST, name="root", src=UPat(UOps.CONST, name="c")),
+   log_match("const_rule_2", lambda root, c: UOp.const(root.dtype, c.arg))),
   #(UPat(UOps.VECTORIZE, name="root", src=UPat(UOps.CONST, name="c")), lambda root, c: UOp.const(root.dtype, c.arg)),
   # a phi on a DEFINE_ACC without loops or a CONST is a noop. this is for correctness, not just speed
-  (UPat(UOps.PHI, src=(UPat(UOps.DEFINE_ACC, name="acc"), UPat(name="acc"))), lambda acc: UOp.cast(acc.src[0], acc.dtype)),
-  (UPat(UOps.PHI, src=(UPat(UOps.DEFINE_ACC, src=(UPat(UOps.CONST),)), UPat(name="x"))), lambda x: x),
-  (UPat(UOps.PHI, src=(UPat(UOps.CONST), UPat(name="x"))), lambda x: x),
+  (UPat(UOps.PHI, src=(UPat(UOps.DEFINE_ACC, name="acc"), UPat(name="acc"))),
+   log_match("phi_on_define_acc_1", lambda acc: UOp.cast(acc.src[0], acc.dtype))),
+  (UPat(UOps.PHI, src=(UPat(UOps.DEFINE_ACC, src=(UPat(UOps.CONST),)), UPat(name="x"))),
+   log_match("phi_on_define_acc_2", lambda x: x)),
+  (UPat(UOps.PHI, src=(UPat(UOps.CONST), UPat(name="x"))),
+   log_match("phi_on_const", lambda x: x)),
   # a DEFINE_ACC without inputs is a const + GEP on a const is the const
-  (UPat(UOps.DEFINE_ACC, name="root", src=(UPat(UOps.CONST),)), lambda root: UOp.cast(root.src[0], root.dtype)),
-  (UPat(UOps.GEP, name="root", src=(UPat(UOps.CONST, name="x"),)), lambda root,x: UOp.const(root.dtype, x.arg)),
+  (UPat(UOps.DEFINE_ACC, name="root", src=(UPat(UOps.CONST),)),
+   log_match("define_acc_without_inputs", lambda root: UOp.cast(root.src[0], root.dtype))),
+  (UPat(UOps.GEP, name="root", src=(UPat(UOps.CONST, name="x"),)),
+   log_match("gep_on_const", lambda root, x: UOp.const(root.dtype, x.arg))),
   # max -2147483648
-  (UOp.max(UOp.var('x'), UOp.const(dtypes.int, -2147483648)), lambda x: x),
+  (UOp.max(UOp.var('x'), UOp.const(dtypes.int, -2147483648)),
+   log_match("max_int_min", lambda x: x)),
   # bool < False is always false, True < bool is always false
-  (UOp.var().lt(UOp.const(dtypes.bool, False)), lambda: UOp.const(dtypes.bool, False)),
-  (UOp.const(dtypes.bool, True).lt(UOp.var()), lambda: UOp.const(dtypes.bool, False)),
+  (UOp.var().lt(UOp.const(dtypes.bool, False)),
+   log_match("bool_lt_false", lambda: UOp.const(dtypes.bool, False))),
+  (UOp.const(dtypes.bool, True).lt(UOp.var()),
+   log_match("true_lt_bool", lambda: UOp.const(dtypes.bool, False))),
   # a conditional with the same results either way is a noop, also fold const conditionals
-  (UOp.var().where(UOp.var("val"), UOp.var("val")), lambda val: val),
-  (UOp.cvar('gate').where(UOp.var('c0'), UOp.var('c1')), lambda gate, c0, c1: c0 if gate.arg else c1),
+  (UOp.var().where(UOp.var("val"), UOp.var("val")),
+   log_match("conditional_same_results", lambda val: val)),
+  (UOp.cvar('gate').where(UOp.var('c0'), UOp.var('c1')),
+   log_match("fold_const_conditional", lambda gate, c0, c1: c0 if gate.arg else c1)),
   # ** constant folding **
-  (UPat(UOps.ALU, name="root", src=UPat(UOps.CONST)), lambda root: UOp.const(root.dtype, exec_alu(root.arg, root.dtype, [x.arg for x in root.src]))),
+  (UPat(UOps.ALU, name="root", src=UPat(UOps.CONST)),
+   log_match("constant_folding", lambda root: UOp.const(root.dtype, exec_alu(root.arg, root.dtype, [x.arg for x in root.src])))),
   # ** self folding **
-  (-(-UOp.var('x')), lambda x: x),    # -(-x) -> x
-  (UOp.var('x') + 0, lambda x: x),    # x+0 -> x
-  (UOp.var('x') * 1, lambda x: x),    # x*1 -> x
-  (UOp.var('x') * -1, lambda x: -x),  # x*-1 -> -x
-  (UOp.var('x') // UOp.var('x'), lambda x: UOp.const(x.dtype, 1)), # x//x -> 1
-  (UOp.var('x') // 1, lambda x: x),   # x//1 -> x
-  (UOp.var('x') // -1, lambda x: -x), # x//-1 -> -x
-  (UOp.var('x') / UOp.var('x'), lambda x: UOp.const(x.dtype, 1)), # x/x -> 1
-  (UOp.var('x') / UOp.cvar('c'), lambda x,c: x*exec_alu(UnaryOps.RECIP, c.dtype, [c.arg])),    # x/c -> x*(1/c)
-  (UOp.var('x', dtype=dtypes.bool).max(UOp.const(dtypes.bool, False)), lambda x: x),  # max(x, False) -> x
+  (-(-UOp.var('x')),
+   log_match("self_folding_double_neg", lambda x: x)),    # -(-x) -> x
+  (UOp.var('x') + 0,
+   log_match("self_folding_add_zero", lambda x: x)),    # x+0 -> x
+  (UOp.var('x') * 1,
+   log_match("self_folding_mul_one", lambda x: x)),    # x*1 -> x
+  (UOp.var('x') * -1,
+   log_match("self_folding_mul_neg_one", lambda x: -x)),  # x*-1 -> -x
+  (UOp.var('x') // UOp.var('x'),
+   log_match("self_folding_div_self", lambda x: UOp.const(x.dtype, 1))), # x//x -> 1
+  (UOp.var('x') // 1,
+   log_match("self_folding_div_one", lambda x: x)),   # x//1 -> x
+  (UOp.var('x') // -1,
+   log_match("self_folding_div_neg_one", lambda x: -x)), # x//-1 -> -x
+  (UOp.var('x') / UOp.var('x'),
+   log_match("self_folding_div_self_float", lambda x: UOp.const(x.dtype, 1))), # x/x -> 1
+  (UOp.var('x') / UOp.cvar('c'),
+   log_match("self_folding_div_const", lambda x, c: x*exec_alu(UnaryOps.RECIP, c.dtype, [c.arg]))),    # x/c -> x*(1/c)
+  (UOp.var('x', dtype=dtypes.bool).max(UOp.const(dtypes.bool, False)),
+   log_match("self_folding_max_bool_false", lambda x: x)),  # max(x, False) -> x
   # ** zero folding **
   #x*0 -> 0 or 0*x -> 0
   #if x is nan or inf it should render the nan value.
   # NOTE: this can be wrong for loaded NaN
-  (UOp.var('x') * 0, lambda x: UOp.const(x.dtype, float('nan') if isinstance(x.arg, float) and (math.isnan(x.arg) or math.isinf(x.arg)) else 0)),
-  (UOp.var('x') - UOp.var('x'), lambda x: UOp.const(x.dtype, 0)),   # x-x -> 0
+  (UOp.var('x') * 0,
+   log_match("zero_folding_mul_zero", lambda x: UOp.const(x.dtype, float('nan') if isinstance(x.arg, float) and (math.isnan(x.arg) or math.isinf(x.arg)) else 0))),
+  (UOp.var('x') - UOp.var('x'),
+   log_match("zero_folding_sub_self", lambda x: UOp.const(x.dtype, 0))),   # x-x -> 0
   # ** load/store folding **
-  (UOp.store(UOp.var("buf"), UOp.var("idx"), UOp.load(UOp.var("buf"), UOp.var("idx"))), lambda buf,idx:UOp(UOps.NOOP)),
+  (UOp.store(UOp.var("buf"), UOp.var("idx"), UOp.load(UOp.var("buf"), UOp.var("idx"))),
+   log_match("load_store_folding", lambda buf, idx: UOp(UOps.NOOP))),
   # ** two stage add/sub folding **
-  ((UOp.var('x') + UOp.cvar('c1')) + UOp.cvar('c2'), lambda x,c1,c2: x+UOp.const(x.dtype, exec_alu(BinaryOps.ADD, x.dtype, [c1.arg, c2.arg]))),
-  ((UOp.var('x') - UOp.cvar('c1')) + UOp.cvar('c2'), lambda x,c1,c2: x+UOp.const(x.dtype, exec_alu(BinaryOps.ADD, x.dtype, [c2.arg, -c1.arg]))),
+  ((UOp.var('x') + UOp.cvar('c1')) + UOp.cvar('c2'), log_match("two_stage_add", lambda x,c1,c2: x+UOp.const(x.dtype, exec_alu(BinaryOps.ADD, x.dtype, [c1.arg, c2.arg])))),
+  ((UOp.var('x') - UOp.cvar('c1')) + UOp.cvar('c2'), log_match("two_stage_sub_add", lambda x,c1,c2: x+UOp.const(x.dtype, exec_alu(BinaryOps.ADD, x.dtype, [c2.arg, -c1.arg])))),
   # *** rules from symbolic ***
   # two stage mul, (x*c1)*c2 = x*(c1*c2)
-  ((UOp.var("x") * UOp.cvar("c1")) * UOp.cvar("c2"), lambda x,c1,c2: x*UOp.const(x.dtype, exec_alu(BinaryOps.MUL, x.dtype, [c1.arg, c2.arg]))),
+  ((UOp.var("x") * UOp.cvar("c1")) * UOp.cvar("c2"), log_match("two_stage_mul", lambda x,c1,c2: x*UOp.const(x.dtype, exec_alu(BinaryOps.MUL, x.dtype, [c1.arg, c2.arg])))),
   # -(x+y) -> -x + -y
   #(-(UOp.var("x") + UOp.var("y")), lambda x,y: (-x)+(-y)),
   # x%1 -> 0
-  (UOp.var("x") % UOp.const(None, 1), lambda x: UOp.const(x.dtype, 0)),
+  (UOp.var("x") % UOp.const(None, 1), log_match("mod_one", lambda x: UOp.const(x.dtype, 0))),
   # (x*c0)+(x*c1) -> x*(c0+c1)
-  (UOp.var("x") * UOp.cvar("c0") + UOp.var("x") * UOp.cvar("c1"), lambda x,c0,c1: x*exec_alu(BinaryOps.ADD, x.dtype, [c0.arg, c1.arg])),
+  (UOp.var("x") * UOp.cvar("c0") + UOp.var("x") * UOp.cvar("c1"), log_match("distribute_mul", lambda x,c0,c1: x*exec_alu(BinaryOps.ADD, x.dtype, [c0.arg, c1.arg]))),
   # (x*c0)+(y*c0) -> (x+y)*c0
   #((UOp.var("x") * UOp.cvar("c0")) + (UOp.var("y") * UOp.cvar("c0")), lambda x,y,c0: c0*(x+y)),
   # (x*c0)//c0 -> x
-  ((UOp.var("x") * UOp.cvar("c0")) // UOp.cvar("c0"), lambda x,c0: x if c0.arg != 0 else None),
+  ((UOp.var("x") * UOp.cvar("c0")) // UOp.cvar("c0"), log_match("mul_div_cancel", lambda x,c0: x if c0.arg != 0 else None)),
   # (x*x2)/x2 -> x
-  ((UOp.var("x") * UOp.var("x2")) / UOp.var("x2"), lambda x,x2: x),
+  ((UOp.var("x") * UOp.var("x2")) / UOp.var("x2"), log_match("mul_div_cancel_var", lambda x,x2: x)),
   # (x//c0)//c1 -> x//(c0*c1)
-  ((UOp.var("x") // UOp.cvar("c0")) // UOp.cvar("c1"), lambda x,c0,c1: x//UOp.const(x.dtype, exec_alu(BinaryOps.MUL, x.dtype, [c0.arg, c1.arg]))),
+  ((UOp.var("x") // UOp.cvar("c0")) // UOp.cvar("c1"), log_match("combine_div", lambda x,c0,c1: x//UOp.const(x.dtype, exec_alu(BinaryOps.MUL, x.dtype, [c0.arg, c1.arg])))),
   # (x/x1)/x2 -> x/(x1*x2)
-  ((UOp.var("x") / UOp.var("x2")) / UOp.var("x3"), lambda x,x2,x3: x/(x2*x3)),
+  ((UOp.var("x") / UOp.var("x2")) / UOp.var("x3"), log_match("combine_div_var", lambda x,x2,x3: x/(x2*x3))),
   # c0 + x < c1 -> x < c1 - c0
   ((UOp.cvar("c0") + UOp.var("x")).lt(UOp.cvar("c1")),
-    lambda x,c0,c1: UOp.lt(x, UOp.const(x.dtype, exec_alu(BinaryOps.ADD, x.dtype, [c1.arg, -c0.arg])))),
+    log_match("simplify_inequality", lambda x,c0,c1: UOp.lt(x, UOp.const(x.dtype, exec_alu(BinaryOps.ADD, x.dtype, [c1.arg, -c0.arg]))))),
   # (x+x*c0)-> x*(c0+1)
-  (UOp.var("x") + UOp.var("x") * UOp.cvar("c0"), lambda x,c0: x*UOp.const(x.dtype, c0.arg+1)),
+  (UOp.var("x") + UOp.var("x") * UOp.cvar("c0"), log_match("factor_common", lambda x,c0: x*UOp.const(x.dtype, c0.arg+1))),
   # x!=0 -> (bool)x
-  (UOp.var("x").ne(0), lambda x: x.cast(dtypes.bool)),
+  (UOp.var("x").ne(0), log_match("ne_zero_to_bool", lambda x: x.cast(dtypes.bool))),
   # bool != 1 -> not bool
-  (UOp.var("x", dtype=dtypes.bool).ne(1), lambda x: -x),
+  (UOp.var("x", dtype=dtypes.bool).ne(1), log_match("bool_ne_one", lambda x: -x)),
   # TODO: can do the invert of this (flip alt/load) when we fix double ops
   (UOp.store(UOp.var("buf"), UOp.var("idx"), UOp.alu(TernaryOps.WHERE, UOp.var("gate"), UOp.var("alt"), UOp.load(UOp.var("buf"), UOp.var("idx")))),
-   lambda buf, idx, gate, alt: UOp.store(buf, idx, alt, gate)),
+   log_match("simplify_conditional_store", lambda buf, idx, gate, alt: UOp.store(buf, idx, alt, gate))),
   # store float4/float2 directly (remove VECTORIZE/GEP)
   (UOp.store(UOp.var("buf"), UOp.var("idx"), UOp(UOps.VECTORIZE, src=tuple(
-    UOp(UOps.GEP, arg=i, src=(UOp.var("val"),)) for i in range(4)))), UOp.store),
+    UOp(UOps.GEP, arg=i, src=(UOp.var("val"),)) for i in range(4)))), log_match("store_float4", UOp.store)),
   (UOp.store(UOp.var("buf"), UOp.var("idx"), UOp(UOps.VECTORIZE, src=tuple(
-    UOp(UOps.GEP, arg=i, src=(UOp.var("val"),)) for i in range(2)))), UOp.store),
+    UOp(UOps.GEP, arg=i, src=(UOp.var("val"),)) for i in range(2)))), log_match("store_float2", UOp.store)),
   # VECTORIZE-PHI-GEP -> PHI-VECTORIZE
   (UPat(UOps.VECTORIZE, name="root", src=tuple(
     UPat(UOps.PHI, src=(UPat(UOps.GEP, i, src=(UPat(name="val"),)), UPat(name=f"v{i}"))) for i in range(4))),
-    lambda root, val, v0, v1, v2, v3: UOp(UOps.PHI, root.dtype, (val, UOp(UOps.VECTORIZE, val.dtype, (v0, v1, v2, v3))))),
+    log_match("vectorize_phi_gep_4", lambda root, val, v0, v1, v2, v3: UOp(UOps.PHI, root.dtype, (val, UOp(UOps.VECTORIZE, val.dtype, (v0, v1, v2, v3)))))),
   (UPat(UOps.VECTORIZE, name="root", src=tuple(
     UPat(UOps.PHI, src=(UPat(UOps.GEP, i, src=(UPat(name="val"),)), UPat(name=f"v{i}"))) for i in range(2))),
-    lambda root, val, v0, v1: UOp(UOps.PHI, root.dtype, (val, UOp(UOps.VECTORIZE, val.dtype, (v0, v1))))),
+    log_match("vectorize_phi_gep_2", lambda root, val, v0, v1: UOp(UOps.PHI, root.dtype, (val, UOp(UOps.VECTORIZE, val.dtype, (v0, v1)))))),
   # NEG/CMPLT -> CMPLT
-  (UOp.lt(-UOp.var('x'), UOp.cvar('c', dtypes.int)), lambda c,x: UOp.lt(UOp.const(c.dtype, -c.arg), x)),
+  (UOp.lt(-UOp.var('x'), UOp.cvar('c', dtypes.int)), log_match("neg_cmplt", lambda c,x: UOp.lt(UOp.const(c.dtype, -c.arg), x))),
   # cast NOOP (NOTE: it's str to deal with PtrDType)
-  (UPat(UOps.CAST, name="root"), lambda root: root.src[0] if str(root.dtype) == str(root.src[0].dtype) else None),
-  (UPat(UOps.VECTORIZE, name="root"), lambda root: root.src[0] if str(root.dtype) == str(root.src[0].dtype) else None),
+  (UPat(UOps.CAST, name="root"), log_match("cast_noop", lambda root: root.src[0] if str(root.dtype) == str(root.src[0].dtype) else None)),
+  (UPat(UOps.VECTORIZE, name="root"), log_match("vectorize_noop", lambda root: root.src[0] if str(root.dtype) == str(root.src[0].dtype) else None)),
   # fold gated LOAD/STORE
-  (UOp.load(UOp.var("buf"), UOp.var("idx"), UOp.const(dtypes.bool, True), UOp.cvar("var")), lambda buf,idx,var: UOp.load(buf, idx, dtype=var.dtype)),
+  (UOp.load(UOp.var("buf"), UOp.var("idx"), UOp.const(dtypes.bool, True), UOp.cvar("var")), log_match("fold_gated_load", lambda buf,idx,var: UOp.load(buf, idx, dtype=var.dtype))),
   (UOp.load(UOp.var("buf"), UOp.var("idx"), UOp.const(dtypes.bool, True), UOp.cvar("var"), UOp.var("barrier")),
-   lambda buf,idx,var,barrier: UOp.load(buf, idx, barrier, dtype=var.dtype)),
-  (UOp.load(UOp.var(), UOp.var(), UOp.const(dtypes.bool, False), UOp.cvar("var")), lambda var: var),
-  (UOp.load(UOp.var(), UOp.var(), UOp.const(dtypes.bool, False), UOp.cvar("var"), UOp.var()), lambda var: var),
-  (UOp.store(UOp.var("buf"), UOp.var("idx"), UOp.var("val"), UOp.const(dtypes.bool, True)), UOp.store),
-  (UOp.store(UOp.var(), UOp.var(), UOp.var(), UOp.const(dtypes.bool, False)), lambda: UOp(UOps.NOOP)),
+   log_match("fold_gated_load_barrier", lambda buf,idx,var,barrier: UOp.load(buf, idx, barrier, dtype=var.dtype))),
+  (UOp.load(UOp.var("buf"), UOp.var("idx"), UOp.const(dtypes.bool, False), UOp.cvar("var")), log_match("fold_gated_load_false", lambda buf, idx, var: var)),
+  (UOp.load(UOp.var(), UOp.var(), UOp.const(dtypes.bool, False), UOp.cvar("var"), UOp.var()), log_match("fold_gated_load_false_barrier", lambda var: var)),
+  (UOp.store(UOp.var("buf"), UOp.var("idx"), UOp.var("val"), UOp.const(dtypes.bool, True)), log_match("fold_gated_store", UOp.store)),
+  (UOp.store(UOp.var(), UOp.var(), UOp.var(), UOp.const(dtypes.bool, False)), log_match("fold_gated_store_false", lambda: UOp(UOps.NOOP))),
   # remove NOOPs from SINK
   (UPat(UOps.SINK, name="root"),
-    lambda root: UOp(UOps.SINK, root.dtype, a, root.arg) if len(a:=tuple(x for x in root.src if x.op is not UOps.NOOP)) != len(root.src) else None)
+    log_match("remove_noop_sink", lambda root: UOp(UOps.SINK, root.dtype, a, root.arg) if len(a:=tuple(x for x in root.src if x.op is not UOps.NOOP)) != len(root.src) else None))
 ])
 
 constant_folder_w_f4 = PatternMatcher(constant_folder.patterns + float4_folding.patterns)
