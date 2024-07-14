@@ -6,6 +6,7 @@ from tinygrad.ops import BinaryOps, TernaryOps, UnaryOps
 from tinygrad.codegen.uops import UOps, UOp
 from tinygrad.codegen.uopgraph import UOpGraph, PatternMatcher, graph_rewrite
 #from tinygrad.engine.graph import print_tree
+from tinygrad.codegen.uopgraph_helpers import pp_uop_graph
 
 simple_pm = PatternMatcher([
   (UOp.cvar('x', dtypes.int), lambda x: UOp.const(dtypes.float, 1.0) + UOp.const(dtypes.float, 2.0)),
@@ -120,6 +121,21 @@ class TestUOpGraph(TestUOps):
     self.assertEqual(out.op, UOps.CONST)
     self.assertEqual(out.arg, 0)
 
+  def test_noop_vectorize(self):
+    # Test that vectorize_noop rule does not fold a VECTORIZE with four consts
+    c1 = UOp.const(dtypes.float, 1.0)
+    c2 = UOp.const(dtypes.float, 2.0)
+    c3 = UOp.const(dtypes.float, 3.0)
+    c4 = UOp.const(dtypes.float, 4.0)
+    vec = UOp(UOps.VECTORIZE, dtypes.float.vec(4), (c1, c2, c3, c4))
+    g = UOpGraph([vec])
+    self.assertEqual(len([x for x in g.uops if x.op is UOps.VECTORIZE]), 1)
+    self.assertEqual(g.uops[-1].op, UOps.VECTORIZE)
+    self.assertEqual(len(g.uops[-1].src), 4)
+    for i, src in enumerate(g.uops[-1].src):
+      self.assertEqual(src.op, UOps.CONST)
+      self.assertEqual(src.arg, float(i + 1))
+
   def test_noop_vectorize_fold(self):
     d0 = UOp(UOps.DEFINE_GLOBAL, PtrDType(dtypes.float), arg=(0, True))
     idx = UOp.const(dtypes.int, 0)
@@ -130,6 +146,40 @@ class TestUOpGraph(TestUOps):
     out = UOp(UOps.STORE, None, (d0, idx, alu))
     g = UOpGraph([out])
     self.assertEqual(len([x for x in g.uops if x.op is UOps.VECTORIZE]), 0)
+
+  def test_fix_image_idx(self):
+    d0 = UOp(UOps.DEFINE_GLOBAL, dtypes.imagef((1, 2, 4)), [], (1, False))
+    lidx0 = UOp(UOps.SPECIAL, dtypes.int, [], (0, 'lidx0', 4))
+    c0 = UOp.const(dtypes.int, 0)
+    c1 = UOp.const(dtypes.int, 1)
+    c2 = UOp.const(dtypes.int, 2)
+    c3 = UOp.const(dtypes.int, 3)
+    c4 = UOp.const(dtypes.int, 4)
+    cm4 = UOp.const(dtypes.int, -4)
+    
+    expand1 = UOp(UOps.EXPAND, dtypes.int, [c0, c1, c2, c3], 2)
+    expand2 = UOp(UOps.EXPAND, dtypes.int, [c0, c1, c2], 3)
+    
+    alu1 = UOp(UOps.ALU, dtypes.int, (lidx0, c4), BinaryOps.MUL)
+    alu2 = UOp(UOps.ALU, dtypes.int, (alu1, expand1), BinaryOps.ADD)
+    alu3 = UOp(UOps.ALU, dtypes.int, (alu2, cm4), BinaryOps.ADD)
+    
+    cmp1 = UOp(UOps.ALU, dtypes.bool, (c0, lidx0), BinaryOps.CMPLT)
+    cmp2 = UOp(UOps.ALU, dtypes.bool, (lidx0, c3), BinaryOps.CMPLT)
+    cmp3 = UOp(UOps.ALU, dtypes.bool, (c0, expand2), BinaryOps.CMPLT)
+    cmp4 = UOp(UOps.ALU, dtypes.bool, (expand2, c2), BinaryOps.CMPLT)
+    
+    mul1 = UOp(UOps.ALU, dtypes.bool, (cmp1, cmp2), BinaryOps.MUL)
+    mul2 = UOp(UOps.ALU, dtypes.bool, (mul1, cmp3), BinaryOps.MUL)
+    mul3 = UOp(UOps.ALU, dtypes.bool, (mul2, cmp4), BinaryOps.MUL)
+    
+    c0f = UOp.const(dtypes.float, 0.0)
+    
+    l = UOp(UOps.LOAD, dtypes.float, (d0, alu3, mul3, c0f))
+
+    pp_uop_graph(l)
+    UOpGraph(UOp(UOps.SINK, src=(l,))).graph()
+    #import pdb; pdb.set_trace()
 
   def test_cast_alu_fold(self):
     d0 = UOp(UOps.DEFINE_GLOBAL, PtrDType(dtypes.bool), arg=(0, True))
