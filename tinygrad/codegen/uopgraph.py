@@ -531,7 +531,7 @@ constant_folder = PatternMatcher([
   (UOp.load(UOp.var("buf"), UOp.var("idx"), UOp.const(dtypes.bool, True), UOp.cvar("var")), log_match("fold_gated_load", lambda buf,idx,var: UOp.load(buf, idx, dtype=var.dtype))),
   (UOp.load(UOp.var("buf"), UOp.var("idx"), UOp.const(dtypes.bool, True), UOp.cvar("var"), UOp.var("barrier")),
    log_match("fold_gated_load_barrier", lambda buf,idx,var,barrier: UOp.load(buf, idx, barrier, dtype=var.dtype))),
-  (UOp.load(UOp.var("buf"), UOp.var("idx"), UOp.const(dtypes.bool, False), UOp.cvar("var")), log_match("fold_gated_load_false", lambda buf, idx, var: var)),
+  (UOp.load(UOp.var("buf"), UOp.var("idx"), UOp.const(dtypes.bool, False), UOp.var("var")), log_match("fold_gated_load_false", lambda buf, idx, var: var)),
   (UOp.load(UOp.var(), UOp.var(), UOp.const(dtypes.bool, False), UOp.cvar("var"), UOp.var()), log_match("fold_gated_load_false_barrier", lambda var: var)),
   (UOp.store(UOp.var("buf"), UOp.var("idx"), UOp.var("val"), UOp.const(dtypes.bool, True)), log_match("fold_gated_store", UOp.store)),
   (UOp.store(UOp.var(), UOp.var(), UOp.var(), UOp.const(dtypes.bool, False)), log_match("fold_gated_store_false", lambda: UOp(UOps.NOOP))),
