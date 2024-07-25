@@ -220,6 +220,9 @@ class PTXRenderer(Renderer):
 
     return self.render_kernel(kernel, name, bufs, c.items())
 
+def vec_const_hack(vec):
+  return UOp(UOps.CONST, dtype=vec.dtype, arg=vec.src[0].arg) if all(x.op == UOps.CONST and x.arg == vec.src[0].arg for x in vec.src) else None
+
 shiftable_consts = set([2**i for i in range(64)])
 ptx_matcher = PatternMatcher([
   (UPat(UOps.ALU, BinaryOps.MUL, name="root", dtype=set([dt for dt in dtypes.fields().values() if dtypes.is_int(dt)]),
@@ -266,4 +269,5 @@ ptx_matcher = PatternMatcher([
     lambda root, alu: UOp(root.op, root.dtype,
       (alu.cast(dtypes.int64)*UOp.const(dtypes.int64, root.src[0].dtype.itemsize)+root.src[0].cast(dtypes.int64),
        UOp.const(dtypes.int64, 0))+root.src[2:])),
+  (UOp(UOps.VECTORIZE).name('vec'), vec_const_hack),
 ])
