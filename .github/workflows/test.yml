@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - master
+      - vectorize-debug2
   pull_request:
   workflow_dispatch:
 
