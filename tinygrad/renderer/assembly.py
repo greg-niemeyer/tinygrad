@@ -195,7 +195,8 @@ class PTXRenderer(Renderer):
           else: kk(f"mov.{f'b{self.types[dtype][1:]}' if dtype != dtypes.bool else 'pred'} {r[src[0]]}, {r[src[1]]};")
           r[u] = r[src[0]]
         # NOTE: casting to str is fine because you can't vectorize a vectorize
-        elif uop in {UOps.VECTORIZE}: r[u] = r[src[0]] if all(c.op == UOps.CONST for c in src) else [cast(str,r[x]) for x in src]
+        elif uop in {UOps.VECTORIZE}:
+          r[u] = r[src[0]] if all(c.op == UOps.CONST for c in src) and len(u.parents) == 1 else [cast(str,r[x]) for x in src]
         elif uop in {UOps.CAST, UOps.BITCAST}:
           assert src[0].dtype is not None and dtype.count == 1
           _cast(r[src[0]], dtype, src[0].dtype, bitcast=uop is UOps.BITCAST, u=u)
