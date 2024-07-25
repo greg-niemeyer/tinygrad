@@ -269,5 +269,7 @@ ptx_matcher = PatternMatcher([
     lambda root, alu: UOp(root.op, root.dtype,
       (alu.cast(dtypes.int64)*UOp.const(dtypes.int64, root.src[0].dtype.itemsize)+root.src[0].cast(dtypes.int64),
        UOp.const(dtypes.int64, 0))+root.src[2:])),
+  # This doesn't work. It seems like we have to actually match the top-level UOps and rewrite them -- we can't just rewrite
+  # the parents and expect the children to update their references. That seems like a lot of work for a kludge.
   (UOp(UOps.VECTORIZE).name('vec'), vec_const_hack),
 ])
