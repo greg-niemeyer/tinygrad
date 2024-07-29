@@ -494,8 +494,10 @@ class UOpGraph:
       return u
     sink_srcs = list(self.sink.src)
     for i, s in enumerate(sink_srcs):
-      if s.op is UOps.STORE and len(s.src) == 4 and (rw:=_replace_gates(s, s.src[3])) != s:
-        sink_srcs[i] = UOp(rw.op, rw.dtype, rw.src, rw.arg)
+      if s.op is UOps.STORE and len(s.src) == 4:
+        rw =_replace_gates(s, s.src[3])
+        if len(rw.src) == 4: sink_srcs[i]  = UOp(rw.op, rw.dtype, (rw.src[:3]+(UOp(UOps.IF, None, (rw.src[3],)),)), rw.arg)
+        elif rw != s: sink_srcs[i] = UOp(rw.op, rw.dtype, rw.src, rw.arg)
     sink = UOp(UOps.SINK, None, tuple(sink_srcs))
 
     # do graph rewrite
