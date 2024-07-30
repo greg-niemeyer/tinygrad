@@ -3,7 +3,7 @@ from typing import Iterator, Optional, Tuple, Dict, List, Set, Union, cast, TYPE
 import functools, itertools, heapq, math
 from tinygrad.dtype import dtypes, PtrDType, ImageDType
 from tinygrad.shape.symbolic import Variable
-from tinygrad.ops import UnaryOps, BinaryOps, ReduceOps, exec_alu
+from tinygrad.ops import UnaryOps, BinaryOps, ReduceOps, TernaryOps, exec_alu
 from tinygrad.helpers import DEBUG, getenv, flatten, dedup, TRANSCENDENTAL, prod, CI
 from tinygrad.codegen.uops import UOp, NOp, UOps, UPat, PatternMatcher, END_FOR_UOP, type_verify
 from tinygrad.codegen.transcendental import xexp2, xlog2, xsin, TRANSCENDENTAL_SUPPORTED_DTYPES
@@ -427,11 +427,16 @@ expander = PatternMatcher([
 ])
 
 def create_gate(root:UOp) -> Optional[UOp]:
+  if (len(root.src) == 4 and root.src[3].op == UOps.IF): return None
   @functools.lru_cache(None)
   def _gate_srcs(u:UOp, gate:UOp) -> UOp:
     if u.op is UOps.LOAD and u.src[-1].op is UOps.BARRIER: return UOp(u.op, u.dtype, u.src[:-1]+(UOp(UOps.IF, None, (gate, u.src[-1])),), u.arg)
     return u if (replace_source:=tuple(_gate_srcs(x, gate) for x in u.src)) == u.src else UOp(u.op, u.dtype, replace_source, u.arg)
-  return None if len(root.src) == 3 or (ret:=_gate_srcs(root, root.src[3])) is root else ret
+  if len(root.src) == 3: return None
+  ret =_gate_srcs(root, root.src[3])
+  if ret.op == UOps.STORE and len(ret.src) == 4 and not any(x.arg == TernaryOps.WHERE for y in ret.src for x in y.src):
+    return UOp(ret.op, ret.dtype, (ret.src[:3]+(UOp(UOps.IF, None, (ret.src[3],)),)), ret.arg)
+  return ret
 
 gate_creator = PatternMatcher([(NOp(UOps.STORE, name="root"), create_gate)])
 
