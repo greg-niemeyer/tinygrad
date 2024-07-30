@@ -3,7 +3,7 @@ from typing import Iterator, Optional, Tuple, Dict, List, Set, Union, cast, TYPE
 import functools, itertools, heapq, math
 from tinygrad.dtype import dtypes, PtrDType, ImageDType
 from tinygrad.shape.symbolic import Variable
-from tinygrad.ops import UnaryOps, BinaryOps, ReduceOps, exec_alu
+from tinygrad.ops import UnaryOps, BinaryOps, ReduceOps, TernaryOps, exec_alu
 from tinygrad.helpers import DEBUG, getenv, flatten, dedup, TRANSCENDENTAL, prod, CI
 from tinygrad.codegen.uops import UOp, NOp, UOps, UPat, PatternMatcher, END_FOR_UOP, type_verify
 from tinygrad.codegen.transcendental import xexp2, xlog2, xsin, TRANSCENDENTAL_SUPPORTED_DTYPES
@@ -340,6 +340,7 @@ def do_expand(root:UOp):
       # both the reduce and upcast args are not expanded here
       dont_expand_args = tuple(x for x in expand_args if x[0] in root.arg[-1] or x[0] in [y[0] for y in flatten(root.arg[-2])])
       expand_args = tuple(x for x in expand_args if x not in dont_expand_args)
+    elif root.op is UOps.STORE: import pdb; pdb.set_trace()
     else:
       dont_expand_args = ()
   new_srcs: List[UOp] = []
@@ -494,11 +495,14 @@ class UOpGraph:
       return u
     sink_srcs = list(self.sink.src)
     for i, s in enumerate(sink_srcs):
-      if s.op is UOps.STORE and len(s.src) == 4:
+      if s.op is UOps.STORE and len(s.src) == 4 and not any(x.op == UOps.EXPAND for x in s.parents):
+      #if s.op is UOps.STORE and len(s.src) == 4 and not any(x.op == UOps.RANGE for x in list(s.parents)) \
+      #  and not any(y.op == TernaryOps.WHERE for x in s.src for y in x.src):
+        #import pdb; pdb.set_trace()
         rw =_replace_gates(s, s.src[3])
-        # NOTE: might need to filter out CAST in src[3] -- s.src[3].op != UOps.CAST
         if len(rw.src) == 4: sink_srcs[i]  = UOp(rw.op, rw.dtype, (rw.src[:3]+(UOp(UOps.IF, None, (rw.src[3],)),)), rw.arg)
         elif rw != s: sink_srcs[i] = UOp(rw.op, rw.dtype, rw.src, rw.arg)
+        #import pdb; pdb.set_trace()
     sink = UOp(UOps.SINK, None, tuple(sink_srcs))
 
     # do graph rewrite
