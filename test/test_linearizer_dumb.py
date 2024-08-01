@@ -33,10 +33,9 @@ class TestLinearizerDumb(unittest.TestCase):
     k.uops.print()
     print(prg.src)
     Device[Device.DEFAULT].compiler.compile_cached(prg.src)
-    with self.assertRaises(AssertionError):
-      gate_count = len([x for x in prg.src.splitlines() if "if" in x])
-      assert gate_count == 1, f"must have only one gate {gate_count} != 1"
-      assert len([u for u in k.uops if u.op is UOps.IF]) == 1, "must have a single IF"
+    gate_count = len([x for x in prg.src.splitlines() if "if" in x])
+    assert gate_count == 1, f"must have only one gate {gate_count} != 1"
+    assert len([u for u in k.uops if u.op is UOps.IF]) == 1, "must have a single IF"
 
   @unittest.skipUnless(Device[Device.DEFAULT].renderer.has_local, "need local")
   def test_max_simplify_and_cancel(self):
