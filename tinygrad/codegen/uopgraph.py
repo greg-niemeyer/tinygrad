@@ -390,7 +390,7 @@ def no_vectorized_alu(alu):
   return UOp(UOps.VECTORIZE, alu.dtype, alus)
 
 def create_gate(root:UOp) -> Optional[UOp]:
-  if (len(root.src) == 4 and root.src[3].op == UOps.IF): return None
+  if (len(root.src) == 4 and root.src[3].op == UOps.IF) or len(root.src) == 3: return None
   @functools.lru_cache(None)
   def _gate_srcs(u:UOp, gate:UOp) -> UOp:
     if u.op is UOps.LOAD and u.src[-1].op is UOps.BARRIER: return UOp(u.op, u.dtype, u.src[:-1]+(UOp(UOps.IF, None, (gate, u.src[-1])),), u.arg)
