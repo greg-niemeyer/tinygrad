@@ -435,8 +435,8 @@ reducer = PatternMatcher([
   # VECTORIZE a CONST is a CONST (eventually remove this rule)
   (UPat(UOps.VECTORIZE, name="root", src=UPat(UOps.CONST, name="c")), lambda root, c: root.const(c.arg)),
   # delete_redundant_gates (after expand, is this still needed?)
-  (NOp(UOps.STORE, name="root"), create_store_gate),
   (NOp(UOps.STORE, name="root"), delete_redundant_gates),
+  (NOp(UOps.STORE, name="root"), create_store_gate),
 ])
 
 # *** uop graph ***
