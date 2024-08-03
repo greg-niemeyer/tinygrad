@@ -146,6 +146,8 @@ class NOp(UOp):
       else tuple)(src.compile() for src in self.src) or None, self.name or name, self.dtype, self.allow_any_len)
 
 class UPat:
+  _match_counts: Dict[Tuple[Optional[Tuple[UOps, ...]], Any, Optional[str], Optional[Tuple[DType, ...]]], int] = {}
+
   def __init__(self, op:Optional[Union[UOps, Set[UOps]]]=None, arg:Any=None, src:Optional[Union[Tuple[UPat, ...], List[UPat], UPat]]=None,
                name:Optional[str]=None, dtype:Optional[Union[DType, Set[DType]]]=None, allow_any_len:bool=False):
     self.op: Optional[Tuple[UOps, ...]] = None if op is None else (tuple(op) if isinstance(op, set) else (op,))
@@ -161,6 +163,11 @@ class UPat:
 
     self.allowed_len: int = 0 if allow_any_len or isinstance(src, UPat) or src is None else len(src)
 
+    # Create a unique key for this UPat using its string representation
+    self._key = str(self)
+    if self._key not in UPat._match_counts:
+      UPat._match_counts[self._key] = 0
+
   def __repr__(self):
     def rep(x):
       form = "UPat(%s, %s, name=%s, dtype=%s, allow_any_len=%s, src=%s)"
@@ -168,18 +175,33 @@ class UPat:
         set(x.dtype) if x.dtype else None, x.allowed_len == 0, "[%s]" if x.src and len(x.src)>1 else "(%s)")
     return pretty_print(self, rep, srcfn=lambda x:None if x.src is None else [next(x.src[0])] if isinstance(x.src[0], itertools.repeat) else x.src[0])
 
+  @classmethod
+  def get_top_matches(cls, n: Optional[int] = None) -> List[Tuple[Tuple[Optional[Tuple[UOps, ...]], Any, Optional[str], Optional[Tuple[DType, ...]]], int]]:
+    sorted_matches = sorted(
+      [(k, v) for k, v in cls._match_counts.items() if v > 0],
+      key=lambda x: x[1],
+      reverse=True
+    )
+    if n is not None:
+        sorted_matches = sorted_matches[:n]
+    return '\n\n'.join([f"{upat}: {count}" for upat, count in sorted_matches])
+
 def _match(uop:UOp, pat:UPat, store:Dict[str, UOp]) -> List[Dict[str, UOp]]:
   if (pat.name is not None and store.setdefault(pat.name, uop) is not uop) or \
      (pat.dtype is not None and uop.dtype not in pat.dtype) or \
      (pat.arg is not None and pat.arg != uop.arg) or \
      (pat.op is not None and uop.op not in pat.op): return []
-  if pat.src is None: return [store]
+  if pat.src is None:
+    UPat._match_counts[pat._key] += 1
+    return [store]
   res: List[Dict[str, UOp]] = []
   for vp in pat.src:
     if pat.allowed_len != 0 and len(uop.src) != pat.allowed_len: return []
     new_stores = [store.copy()]
     for uu, vv in zip(uop.src, vp): new_stores = [rstore for nstore in new_stores for rstore in _match(uu, vv, nstore)]
     res.extend(new_stores)
+  if res:
+    UPat._match_counts[pat._key] += 1
   return res
 
 class PatternMatcher:

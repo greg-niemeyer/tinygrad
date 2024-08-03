@@ -7,6 +7,7 @@ from tinygrad import Tensor, TinyJit, dtypes
 from tinygrad.nn import Conv2d, GroupNorm
 from tinygrad.nn.state import safe_load, load_state_dict
 from tinygrad.helpers import fetch, trange, colored, Timing, GlobalCounters
+from tinygrad.codegen.uops import UPat
 from tinygrad.codegen.uopgraph import get_graph_rewrite_stats, reset_graph_rewrite_tracker
 from extra.models.clip import Embedder, FrozenClosedClipEmbedder, FrozenOpenClipEmbedder
 from extra.models.unet import UNetModel, Upsample, Downsample, timestep_embedding
@@ -431,3 +432,4 @@ if __name__ == "__main__":
     print(colored(f"output validated with {distance=}", "green"))
 
   print(get_graph_rewrite_stats())
+  print(UPat.get_top_matches())
