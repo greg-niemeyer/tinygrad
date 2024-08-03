@@ -8,6 +8,40 @@ from tinygrad.helpers import DEBUG, getenv, flatten, dedup, TRANSCENDENTAL, prod
 from tinygrad.codegen.uops import UOp, NOp, UOps, UPat, PatternMatcher, END_FOR_UOP, type_verify
 from tinygrad.codegen.transcendental import xexp2, xlog2, xsin, TRANSCENDENTAL_SUPPORTED_DTYPES
 if TYPE_CHECKING: from tinygrad.renderer import Renderer
+from collections import Counter
+from typing import Dict, Tuple, NamedTuple
+
+class RewriteStats(NamedTuple):
+    op_counter: Counter
+    inner_rewrite_calls: int
+    rewrite_calls: int
+
+class GraphRewriteTracker:
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.total_op_counter = Counter()
+        self.total_inner_rewrite_calls = 0
+        self.total_rewrite_calls = 0
+        self.call_count = 0
+
+    def update(self, stats: RewriteStats):
+        self.total_op_counter.update(stats.op_counter)
+        self.total_inner_rewrite_calls += stats.inner_rewrite_calls
+        self.total_rewrite_calls += stats.rewrite_calls
+        self.call_count += 1
+
+    def get_stats(self):
+        return f"""
+UOp Distribution:
+{self._format_op_distribution()}
+Total Inner Rewrite Calls: {self.total_inner_rewrite_calls}
+Total Rewrite Calls: {self.total_rewrite_calls}
+Total Calls: {self.call_count}"""
+
+    def _format_op_distribution(self):
+        return "\n".join(f"    {k}: {v}" for k, v in self.total_op_counter.items())
 
 # ***** float4/image store handling *****
 
@@ -444,16 +478,40 @@ def get_children_dfs(u:UOp, children:Dict[UOp, List[UOp]], in_degree:Dict[UOp, i
     children[x].append(u)
   in_degree[u] = len(u.src)
 
+graph_rewrite_tracker = GraphRewriteTracker()
+
 def graph_rewrite(sink:UOp, pm:PatternMatcher) -> UOp:
-  nodes: Dict[Tuple, UOp] = {}
-  replace: Dict[UOp, UOp] = {}
-  def __inner_rewrite(n:UOp) -> UOp:
-    if n in replace: return replace[n]
-    replace_source = (n.op, n.dtype, tuple(__inner_rewrite(y) for y in n.src), n.arg)
-    if found := nodes.get(replace_source): replace[n] = found
-    else: nodes[replace_source] = replace[n] = found = __inner_rewrite(new_x) if (new_x := pm.rewrite(x:=UOp(*replace_source))) else x
-    return found
-  return __inner_rewrite(sink)
+    nodes: Dict[Tuple, UOp] = {}
+    replace: Dict[UOp, UOp] = {}
+    op_counter = Counter()
+    inner_rewrite_calls = 0
+    rewrite_calls = 0
+
+    def __inner_rewrite(n:UOp) -> UOp:
+        nonlocal inner_rewrite_calls, rewrite_calls
+        inner_rewrite_calls += 1
+        op_counter[n.op] += 1
+
+        if n in replace: return replace[n]
+        replace_source = (n.op, n.dtype, tuple(__inner_rewrite(y) for y in n.src), n.arg)
+        if found := nodes.get(replace_source): replace[n] = found
+        else:
+            rewrite_calls += 1
+            nodes[replace_source] = replace[n] = found = __inner_rewrite(new_x) if (new_x := pm.rewrite(x:=UOp(*replace_source))) else x
+        return found
+
+    result = __inner_rewrite(sink)
+
+    stats = RewriteStats(op_counter, inner_rewrite_calls, rewrite_calls)
+    graph_rewrite_tracker.update(stats)
+
+    return result
+
+def get_graph_rewrite_stats():
+    return graph_rewrite_tracker.get_stats()
+
+def reset_graph_rewrite_tracker():
+    graph_rewrite_tracker.reset()
 
 class UOpGraph:
   def __init__(self, sink:Union[UOp, List[UOp]], opts:Optional[Renderer]=None):

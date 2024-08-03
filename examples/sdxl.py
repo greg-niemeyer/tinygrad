@@ -7,6 +7,7 @@ from tinygrad import Tensor, TinyJit, dtypes
 from tinygrad.nn import Conv2d, GroupNorm
 from tinygrad.nn.state import safe_load, load_state_dict
 from tinygrad.helpers import fetch, trange, colored, Timing, GlobalCounters
+from tinygrad.codegen.uopgraph import get_graph_rewrite_stats, reset_graph_rewrite_tracker
 from extra.models.clip import Embedder, FrozenClosedClipEmbedder, FrozenOpenClipEmbedder
 from extra.models.unet import UNetModel, Upsample, Downsample, timestep_embedding
 from examples.stable_diffusion import ResnetBlock, Mid
@@ -374,6 +375,8 @@ if __name__ == "__main__":
   parser.add_argument('--noshow',   action='store_true', help="Don't show the image")
   args = parser.parse_args()
 
+  reset_graph_rewrite_tracker()
+
   Tensor.no_grad = True
   if args.seed is not None:
     Tensor.manual_seed(args.seed)
@@ -426,3 +429,5 @@ if __name__ == "__main__":
     distance = (((x - ref_image).cast(dtypes.float) / ref_image.max())**2).mean().item()
     assert distance < 4e-3, colored(f"validation failed with {distance=}", "red")
     print(colored(f"output validated with {distance=}", "green"))
+
+  print(get_graph_rewrite_stats())
