@@ -4,8 +4,8 @@ from tinygrad import dtypes, Variable
 from tinygrad.dtype import PtrDType
 from tinygrad.helpers import DEBUG
 from tinygrad.ops import BinaryOps, TernaryOps, UnaryOps, ReduceOps
-from tinygrad.codegen.uops import UOps, UOp, NOp, PatternMatcher
-from tinygrad.codegen.uopgraph import UOpGraph, graph_rewrite, expander, reducer, constant_folder, float4_folding
+from tinygrad.codegen.uops import UOps, UOp, NOp, PatternMatcher, UPat
+from tinygrad.codegen.uopgraph import UOpGraph, graph_rewrite, get_graph_rewrite_stats, expander, reducer, constant_folder, float4_folding
 
 simple_pm = PatternMatcher([
   (NOp.cvar('x', dtypes.int), lambda x: UOp.const(dtypes.float, 1.0) + UOp.const(dtypes.float, 2.0)),
@@ -249,6 +249,512 @@ class TestUOpGraph(TestUOps):
       wmma = UOp(UOps.WMMA, dtypes.half.vec(i), (var, vec, acc))
       g = UOpGraph([wmma])
       self.assert_equiv_uops(g.uops[-1], wmma)
+  
+  def test_complex_uop_graph(self):
+    # Define constants and variables used multiple times
+    const_0 = UOp.const(dtypes.bigint, 0)
+    const_1 = UOp.const(dtypes.bigint, 1)
+    const_2 = UOp.const(dtypes.bigint, 2)
+    const_3 = UOp.const(dtypes.bigint, 3)
+    const_4 = UOp.const(dtypes.bigint, 4)
+    const_8 = UOp.const(dtypes.bigint, 8)
+    
+    # Create the complex UOpGraph
+    expand = UOp(UOps.EXPAND, dtypes.float, arg=((10, 2),), src=(
+      UOp(UOps.GEP, dtypes.float, arg=0, src=(
+        x1:=UOp(UOps.WMMA, dtypes.float.vec(2), arg=('WMMA_8_8_8_half_float', (8, 8, 8), dtypes.half, dtypes.float, 'METAL', (((10, 2),), ((10, 2),), ((10, 2),)), (9,)), src=(
+          UOp(UOps.CONTRACT, dtypes.half.vec(2), arg=((10, 2),), src=(
+            UOp(UOps.LOAD, dtypes.half, arg=None, src=(
+              UOp(UOps.DEFINE_GLOBAL, PtrDType(dtypes.half), arg=1, src=()),
+              UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                  UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                    UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                      UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                        UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                          UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                            UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                              UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                                UOp(UOps.SPECIAL, dtypes.bigint, arg=('gidx2', 2), src=()),
+                                UOp(UOps.CONST, dtypes.bigint, arg=1310720, src=()),)),
+                              UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                                UOp(UOps.SPECIAL, dtypes.bigint, arg=('gidx0', 128), src=()),
+                                UOp(UOps.CONST, dtypes.bigint, arg=32, src=()),)),)),
+                            UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                              x20:=UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MOD, src=(
+                                x21:=UOp(UOps.SPECIAL, dtypes.bigint, arg=('lidx0', 16), src=()),
+                                const_2,)),
+                              UOp(UOps.CONST, dtypes.bigint, arg=8192, src=()),)),)),
+                          x24:=UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MOD, src=(
+                            x25:=UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.IDIV, src=(
+                               x21,
+                               const_2,)),
+                            const_4,)),)),
+                        UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                          x28:=UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MOD, src=(
+                            UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.IDIV, src=(
+                               x25,
+                               const_4,)),
+                             const_2,)),
+                          UOp(UOps.CONST, dtypes.bigint, arg=16384, src=()),)),)),
+                      UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                        x32:=UOp(UOps.SPECIAL, dtypes.bigint, arg=('lidx1', 2), src=()),
+                         const_4,)),)),
+                    UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                      x34:=UOp(UOps.RANGE, dtypes.bigint, arg=(8, True), src=(
+                        const_0,
+                        UOp(UOps.CONST, dtypes.bigint, arg=40, src=()),)),
+                      UOp(UOps.CONST, dtypes.bigint, arg=32768, src=()),)),)),
+                  UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                    x39:=UOp(UOps.EXPAND, dtypes.bigint, arg=((10, 2),), src=(
+                       const_0,
+                       const_1,)),
+                    UOp(UOps.CONST, dtypes.bigint, arg=4096, src=()),)),)),
+                UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                  UOp(UOps.EXPAND, dtypes.bigint, arg=((11, 4),), src=(
+                     const_0,
+                     const_1,
+                     const_2,
+                     const_3,)),
+                  const_8,)),)),)),)),
+          UOp(UOps.CONTRACT, dtypes.half.vec(2), arg=((10, 2),), src=(
+            UOp(UOps.LOAD, dtypes.half, arg=None, src=(
+              UOp(UOps.DEFINE_GLOBAL, PtrDType(dtypes.half), arg=2, src=()),
+              UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                  UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                    UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                      UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                        UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                          UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                            UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                              UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                                UOp(UOps.SPECIAL, dtypes.bigint, arg=('gidx1', 4), src=()),
+                                UOp(UOps.CONST, dtypes.bigint, arg=51200, src=()),)),
+                              UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                                 x20,
+                                UOp(UOps.CONST, dtypes.bigint, arg=640, src=()),)),)),
+                             x24,)),
+                          UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                             x28,
+                            UOp(UOps.CONST, dtypes.bigint, arg=1280, src=()),)),)),
+                        UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                           x32,
+                           const_4,)),)),
+                      UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                        UOp(UOps.SPECIAL, dtypes.bigint, arg=('lidx2', 4), src=()),
+                        UOp(UOps.CONST, dtypes.bigint, arg=12800, src=()),)),)),
+                    UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                       x34,
+                       const_8,)),)),
+                  UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                     x39,
+                    UOp(UOps.CONST, dtypes.bigint, arg=320, src=()),)),)),
+                UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                  UOp(UOps.EXPAND, dtypes.bigint, arg=((12, 5),), src=(
+                     const_0,
+                     const_1,
+                     const_2,
+                     const_3,
+                     const_4,)),
+                  UOp(UOps.CONST, dtypes.bigint, arg=2560, src=()),)),)),)),)),
+          UOp(UOps.CONST, dtypes.float.vec(2), arg=0.0, src=()),)),)),
+      UOp(UOps.GEP, dtypes.float, arg=1, src=(
+         x1,)),))
+    
+    g = UOpGraph([expand])
+    g.linearize()
+    #import time
+    #start_time = time.time()
+    #for _ in range(1000):
+    #    g = UOpGraph([expand])
+    #    g.linearize()
+    #end_time = time.time()
+    
+    #print(f"Time taken to linearize 1000 times: {end_time - start_time:.4f} seconds")
+    print(get_graph_rewrite_stats())
+    print(UPat.get_top_matches())
+
+    #import pdb; pdb.set_trace()
+
+  
+  def test_complex_uop_graph2(self):
+    # Define constants and variables used multiple times
+    const_0 = UOp.const(dtypes.bigint, 0)
+    const_1 = UOp.const(dtypes.bigint, 1)
+    const_2 = UOp.const(dtypes.bigint, 2)
+    const_3 = UOp.const(dtypes.bigint, 3)
+    const_4 = UOp.const(dtypes.bigint, 4)
+    
+    # Create the complex UOpGraph
+    expand = UOp(UOps.EXPAND, dtypes.float, arg=((9, 2),), src=(
+      UOp(UOps.GEP, dtypes.float, arg=0, src=(
+        x1:=UOp(UOps.WMMA, dtypes.float.vec(2), arg=('WMMA_8_8_8_half_float', (8, 8, 8), dtypes.half, dtypes.float, 'METAL', (((9, 2),), ((9, 2),), ((9, 2),)), (8,)), src=(
+          UOp(UOps.CONTRACT, dtypes.half.vec(2), arg=((9, 2),), src=(
+            UOp(UOps.LOAD, dtypes.half, arg=None, src=(
+              UOp(UOps.DEFINE_GLOBAL, PtrDType(dtypes.half), arg=1, src=()),
+              UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                  UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                    UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                      UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                        UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                          UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                            UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                              UOp(UOps.SPECIAL, dtypes.bigint, arg=('gidx1', 256), src=()),
+                              UOp(UOps.CONST, dtypes.bigint, arg=20480, src=()),)),
+                            UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                              x16:=UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MOD, src=(
+                                x17:=UOp(UOps.SPECIAL, dtypes.bigint, arg=('lidx0', 16), src=()),
+                                x18:=UOp(UOps.CONST, dtypes.bigint, arg=2, src=()),)),
+                               x18,)),)),
+                          UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                            x20:=UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MOD, src=(
+                              x21:=UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.IDIV, src=(
+                                 x17,
+                                 x18,)),
+                              x22:=UOp(UOps.CONST, dtypes.bigint, arg=4, src=()),)),
+                            x23:=UOp(UOps.CONST, dtypes.bigint, arg=640, src=()),)),)),
+                        UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                          x25:=UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MOD, src=(
+                            UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.IDIV, src=(
+                               x21,
+                               x22,)),
+                             x18,)),
+                           x22,)),)),
+                      UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                        x28:=UOp(UOps.SPECIAL, dtypes.bigint, arg=('lidx1', 2), src=()),
+                        x29:=UOp(UOps.CONST, dtypes.bigint, arg=2560, src=()),)),)),
+                    UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                      x31:=UOp(UOps.RANGE, dtypes.bigint, arg=(7, True), src=(
+                        x32:=UOp(UOps.CONST, dtypes.bigint, arg=0, src=()),
+                        UOp(UOps.CONST, dtypes.bigint, arg=80, src=()),)),
+                      x34:=UOp(UOps.CONST, dtypes.bigint, arg=8, src=()),)),)),
+                  x35:=UOp(UOps.EXPAND, dtypes.bigint, arg=((9, 2),), src=(
+                     x32,
+                    x36:=UOp(UOps.CONST, dtypes.bigint, arg=1, src=()),)),)),
+                UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                  UOp(UOps.EXPAND, dtypes.bigint, arg=((10, 4),), src=(
+                     x32,
+                     x36,
+                     x18,
+                    x39:=UOp(UOps.CONST, dtypes.bigint, arg=3, src=()),)),
+                  x40:=UOp(UOps.CONST, dtypes.bigint, arg=5120, src=()),)),)),)),)),
+          UOp(UOps.CONTRACT, dtypes.half.vec(2), arg=((9, 2),), src=(
+            UOp(UOps.LOAD, dtypes.half, arg=None, src=(
+              UOp(UOps.DEFINE_GLOBAL, PtrDType(dtypes.half), arg=2, src=()),
+              UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                  UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                    UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                      UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                        UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                          UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                            UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                              UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                                UOp(UOps.SPECIAL, dtypes.bigint, arg=('gidx0', 4), src=()),
+                                UOp(UOps.CONST, dtypes.bigint, arg=102400, src=()),)),
+                              UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                                 x16,
+                                UOp(UOps.CONST, dtypes.bigint, arg=1280, src=()),)),)),
+                             x20,)),
+                          UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                             x25,
+                             x29,)),)),
+                        UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                           x28,
+                           x22,)),)),
+                      UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                        UOp(UOps.SPECIAL, dtypes.bigint, arg=('lidx2', 4), src=()),
+                        UOp(UOps.CONST, dtypes.bigint, arg=25600, src=()),)),)),
+                    UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                       x31,
+                       x34,)),)),
+                  UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                     x35,
+                     x23,)),)),
+                UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                  UOp(UOps.EXPAND, dtypes.bigint, arg=((11, 5),), src=(
+                     x32,
+                     x36,
+                     x18,
+                     x39,
+                     x22,)),
+                   x40,)),)),)),)),
+          UOp(UOps.CONST, dtypes.float.vec(2), arg=0.0, src=()),)),)),
+      UOp(UOps.GEP, dtypes.float, arg=1, src=(
+         x1,)),))
+    
+    g = UOpGraph([expand])
+    g.linearize()
+    #import time
+    #start_time = time.time()
+    #for _ in range(1000):
+    #    g = UOpGraph([expand])
+    #    g.linearize()
+    #end_time = time.time()
+    
+    #print(f"Time taken to linearize 1000 times: {end_time - start_time:.4f} seconds")
+    print(get_graph_rewrite_stats())
+    print(UPat.get_top_matches())
+
+    #import pdb; pdb.set_trace()
+  
+  def test_complex_uop_graph3(self):
+    # Define constants and variables used multiple times
+    const_0 = UOp.const(dtypes.bigint, 0)
+    const_1 = UOp.const(dtypes.bigint, 1)
+    const_2 = UOp.const(dtypes.bigint, 2)
+    const_3 = UOp.const(dtypes.bigint, 3)
+    const_4 = UOp.const(dtypes.bigint, 4)
+    const_8 = UOp.const(dtypes.bigint, 8)
+    
+    # Create the complex UOpGraph
+    expand = UOp(UOps.EXPAND, dtypes.float, arg=((10, 2),), src=(
+      UOp(UOps.GEP, dtypes.float, arg=0, src=(
+        x1:=UOp(UOps.WMMA, dtypes.float.vec(2), arg=('WMMA_8_8_8_half_float', (8, 8, 8), dtypes.half, dtypes.float, 'METAL', (((10, 2),), ((10, 2),), ((10, 2),)), (9,)), src=(
+          UOp(UOps.CONTRACT, dtypes.half.vec(2), arg=((10, 2),), src=(
+            UOp(UOps.LOAD, dtypes.half, arg=None, src=(
+              UOp(UOps.DEFINE_GLOBAL, PtrDType(dtypes.half), arg=1, src=()),
+              UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                  UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                    UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                      UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                        UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                          UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                            UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                              UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                                UOp(UOps.SPECIAL, dtypes.bigint, arg=('gidx2', 2), src=()),
+                                UOp(UOps.CONST, dtypes.bigint, arg=1310720, src=()),)),
+                              UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                                UOp(UOps.SPECIAL, dtypes.bigint, arg=('gidx0', 128), src=()),
+                                UOp(UOps.CONST, dtypes.bigint, arg=32, src=()),)),)),
+                            UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                              x20:=UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MOD, src=(
+                                x21:=UOp(UOps.SPECIAL, dtypes.bigint, arg=('lidx0', 16), src=()),
+                                const_2,)),
+                              UOp(UOps.CONST, dtypes.bigint, arg=8192, src=()),)),)),
+                          x24:=UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MOD, src=(
+                            x25:=UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.IDIV, src=(
+                               x21,
+                               const_2,)),
+                            const_4,)),)),
+                        UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                          x28:=UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MOD, src=(
+                            UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.IDIV, src=(
+                               x25,
+                               const_4,)),
+                             const_2,)),
+                          UOp(UOps.CONST, dtypes.bigint, arg=16384, src=()),)),)),
+                      UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                        x32:=UOp(UOps.SPECIAL, dtypes.bigint, arg=('lidx1', 2), src=()),
+                         const_4,)),)),
+                    UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                      x34:=UOp(UOps.RANGE, dtypes.bigint, arg=(8, True), src=(
+                        const_0,
+                        UOp(UOps.CONST, dtypes.bigint, arg=40, src=()),)),
+                      UOp(UOps.CONST, dtypes.bigint, arg=32768, src=()),)),)),
+                  UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                    x39:=UOp(UOps.EXPAND, dtypes.bigint, arg=((10, 2),), src=(
+                       const_0,
+                       const_1,)),
+                    UOp(UOps.CONST, dtypes.bigint, arg=4096, src=()),)),)),
+                UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                  UOp(UOps.EXPAND, dtypes.bigint, arg=((11, 4),), src=(
+                     const_0,
+                     const_1,
+                     const_2,
+                     const_3,)),
+                  const_8,)),)),)),)),
+          UOp(UOps.CONTRACT, dtypes.half.vec(2), arg=((10, 2),), src=(
+            UOp(UOps.LOAD, dtypes.half, arg=None, src=(
+              UOp(UOps.DEFINE_GLOBAL, PtrDType(dtypes.half), arg=2, src=()),
+              UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                  UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                    UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                      UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                        UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                          UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                            UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                              UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                                UOp(UOps.SPECIAL, dtypes.bigint, arg=('gidx1', 4), src=()),
+                                UOp(UOps.CONST, dtypes.bigint, arg=51200, src=()),)),
+                              UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                                 x20,
+                                UOp(UOps.CONST, dtypes.bigint, arg=640, src=()),)),)),
+                             x24,)),
+                          UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                             x28,
+                            UOp(UOps.CONST, dtypes.bigint, arg=1280, src=()),)),)),
+                        UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                           x32,
+                           const_4,)),)),
+                      UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                        UOp(UOps.SPECIAL, dtypes.bigint, arg=('lidx2', 4), src=()),
+                        UOp(UOps.CONST, dtypes.bigint, arg=12800, src=()),)),)),
+                    UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                       x34,
+                       const_8,)),)),
+                  UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                     x39,
+                    UOp(UOps.CONST, dtypes.bigint, arg=320, src=()),)),)),
+                UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                  UOp(UOps.EXPAND, dtypes.bigint, arg=((12, 5),), src=(
+                     const_0,
+                     const_1,
+                     const_2,
+                     const_3,
+                     const_4,)),
+                  UOp(UOps.CONST, dtypes.bigint, arg=2560, src=()),)),)),)),)),
+          UOp(UOps.VECTORIZE, dtypes.float.vec(2), src=(
+            UOp(UOps.CONST, dtypes.float, arg=0.0, src=()),
+            UOp(UOps.CONST, dtypes.float, arg=0.0, src=())
+          )),)),)),
+      UOp(UOps.GEP, dtypes.float, arg=1, src=(
+         x1,)),))
+    
+    g = UOpGraph([expand])
+    g.linearize()
+    #import time
+    #start_time = time.time()
+    #for _ in range(1000):
+    #    g = UOpGraph([expand])
+    #    g.linearize()
+    #end_time = time.time()
+    
+    #print(f"Time taken to linearize 1000 times: {end_time - start_time:.4f} seconds")
+    print(get_graph_rewrite_stats())
+    print(UPat.get_top_matches())
+
+    #import pdb; pdb.set_trace()
+
+  
+  def test_complex_uop_graph4(self):
+    # Define constants and variables used multiple times
+    const_0 = UOp.const(dtypes.bigint, 0)
+    const_1 = UOp.const(dtypes.bigint, 1)
+    const_2 = UOp.const(dtypes.bigint, 2)
+    const_3 = UOp.const(dtypes.bigint, 3)
+    const_4 = UOp.const(dtypes.bigint, 4)
+    
+    # Create the complex UOpGraph
+    expand = UOp(UOps.EXPAND, dtypes.float, arg=((9, 2),), src=(
+      UOp(UOps.GEP, dtypes.float, arg=0, src=(
+        x1:=UOp(UOps.WMMA, dtypes.float.vec(2), arg=('WMMA_8_8_8_half_float', (8, 8, 8), dtypes.half, dtypes.float, 'METAL', (((9, 2),), ((9, 2),), ((9, 2),)), (8,)), src=(
+          UOp(UOps.CONTRACT, dtypes.half.vec(2), arg=((9, 2),), src=(
+            UOp(UOps.LOAD, dtypes.half, arg=None, src=(
+              UOp(UOps.DEFINE_GLOBAL, PtrDType(dtypes.half), arg=1, src=()),
+              UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                  UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                    UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                      UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                        UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                          UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                            UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                              UOp(UOps.SPECIAL, dtypes.bigint, arg=('gidx1', 256), src=()),
+                              UOp(UOps.CONST, dtypes.bigint, arg=20480, src=()),)),
+                            UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                              x16:=UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MOD, src=(
+                                x17:=UOp(UOps.SPECIAL, dtypes.bigint, arg=('lidx0', 16), src=()),
+                                x18:=UOp(UOps.CONST, dtypes.bigint, arg=2, src=()),)),
+                               x18,)),)),
+                          UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                            x20:=UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MOD, src=(
+                              x21:=UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.IDIV, src=(
+                                 x17,
+                                 x18,)),
+                              x22:=UOp(UOps.CONST, dtypes.bigint, arg=4, src=()),)),
+                            x23:=UOp(UOps.CONST, dtypes.bigint, arg=640, src=()),)),)),
+                        UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                          x25:=UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MOD, src=(
+                            UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.IDIV, src=(
+                               x21,
+                               x22,)),
+                             x18,)),
+                           x22,)),)),
+                      UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                        x28:=UOp(UOps.SPECIAL, dtypes.bigint, arg=('lidx1', 2), src=()),
+                        x29:=UOp(UOps.CONST, dtypes.bigint, arg=2560, src=()),)),)),
+                    UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                      x31:=UOp(UOps.RANGE, dtypes.bigint, arg=(7, True), src=(
+                        x32:=UOp(UOps.CONST, dtypes.bigint, arg=0, src=()),
+                        UOp(UOps.CONST, dtypes.bigint, arg=80, src=()),)),
+                      x34:=UOp(UOps.CONST, dtypes.bigint, arg=8, src=()),)),)),
+                  x35:=UOp(UOps.EXPAND, dtypes.bigint, arg=((9, 2),), src=(
+                     x32,
+                    x36:=UOp(UOps.CONST, dtypes.bigint, arg=1, src=()),)),)),
+                UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                  UOp(UOps.EXPAND, dtypes.bigint, arg=((10, 4),), src=(
+                     x32,
+                     x36,
+                     x18,
+                    x39:=UOp(UOps.CONST, dtypes.bigint, arg=3, src=()),)),
+                  x40:=UOp(UOps.CONST, dtypes.bigint, arg=5120, src=()),)),)),)),)),
+          UOp(UOps.CONTRACT, dtypes.half.vec(2), arg=((9, 2),), src=(
+            UOp(UOps.LOAD, dtypes.half, arg=None, src=(
+              UOp(UOps.DEFINE_GLOBAL, PtrDType(dtypes.half), arg=2, src=()),
+              UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                  UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                    UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                      UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                        UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                          UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                            UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.ADD, src=(
+                              UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                                UOp(UOps.SPECIAL, dtypes.bigint, arg=('gidx0', 4), src=()),
+                                UOp(UOps.CONST, dtypes.bigint, arg=102400, src=()),)),
+                              UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                                 x16,
+                                UOp(UOps.CONST, dtypes.bigint, arg=1280, src=()),)),)),
+                             x20,)),
+                          UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                             x25,
+                             x29,)),)),
+                        UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                           x28,
+                           x22,)),)),
+                      UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                        UOp(UOps.SPECIAL, dtypes.bigint, arg=('lidx2', 4), src=()),
+                        UOp(UOps.CONST, dtypes.bigint, arg=25600, src=()),)),)),
+                    UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                       x31,
+                       x34,)),)),
+                  UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                     x35,
+                     x23,)),)),
+                UOp(UOps.ALU, dtypes.bigint, arg=BinaryOps.MUL, src=(
+                  UOp(UOps.EXPAND, dtypes.bigint, arg=((11, 5),), src=(
+                     x32,
+                     x36,
+                     x18,
+                     x39,
+                     x22,)),
+                   x40,)),)),)),)),
+          UOp(UOps.VECTORIZE, dtypes.float.vec(2), src=(
+            UOp(UOps.CONST, dtypes.float, arg=0.0, src=()),
+            UOp(UOps.CONST, dtypes.float, arg=0.0, src=())
+          )),)),)),
+      UOp(UOps.GEP, dtypes.float, arg=1, src=(
+         x1,)),))
+    
+    g = UOpGraph([expand])
+    g.linearize()
+    #import time
+    #start_time = time.time()
+    #for _ in range(1000):
+    #    g = UOpGraph([expand])
+    #    g.linearize()
+    #end_time = time.time()
+    
+    #print(f"Time taken to linearize 1000 times: {end_time - start_time:.4f} seconds")
+    print(get_graph_rewrite_stats())
+    print(UPat.get_top_matches())
+
+    #import pdb; pdb.set_trace()
 
   def test_phi_vec_const_fold(self):
     for vec_size in [2, 4, 8]:
