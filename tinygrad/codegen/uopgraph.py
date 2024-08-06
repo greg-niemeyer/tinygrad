@@ -256,6 +256,7 @@ constant_folder = PatternMatcher([
   # ** self folding **
   (-(-NOp.var('x')), log_execution("Double negation")(lambda x: x)),    # -(-x) -> x
   (NOp.var('x') + 0, log_execution("Add zero")(lambda x: x)),    # x+0 -> x
+  *[(NOp.var('x') + NOp(UOps.VECTORIZE, src=tuple(NOp(UOps.CONST, arg=0) for _ in range(i))), log_execution(f"Add zero vectorized {i}")(lambda x: x)) for i in [2, 4, 8]],    # x + [0,0,...,0] -> x
   (NOp.var('x') * 1, log_execution("Multiply by one")(lambda x: x)),    # x*1 -> x
   (NOp.var('x') * -1, log_execution("Multiply by negative one")(lambda x: -x)),  # x*-1 -> -x
   (NOp.var('x') // NOp.var('x'), log_execution("Divide by self")(lambda x: x.const(1))), # x//x -> 1
