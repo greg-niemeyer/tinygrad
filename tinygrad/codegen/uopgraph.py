@@ -436,7 +436,17 @@ def create_store_gate(root:UOp) -> Optional[UOp]:
   if (len(root.src) == 4 and root.src[3].op == UOps.IF) or len(root.src) == 3: return None
   if not any(x.arg == TernaryOps.WHERE for y in root.src for x in y.src) \
     and not any(s.op == UOps.PHI and any(ss.op == UOps.DEFINE_ACC for ss in s.src) for s in root.src):
-    return UOp(root.op, root.dtype, (root.src[:3]+(UOp(UOps.IF, None, (root.src[3],)),)), root.arg)
+    def find_upstream_ops(node: UOp) -> Set[UOp]:
+        ops = set()
+        if node.op in {UOps.BARRIER, UOps.DEFINE_ACC}:
+            ops.add(node)
+        for parent in getattr(node, 'parents', []):
+            ops.update(find_upstream_ops(parent))
+        return ops
+
+    upstream_ops = find_upstream_ops(root)
+    if_src = (root.src[3],) + tuple(upstream_ops)
+    return UOp(root.op, root.dtype, (root.src[:3] + (UOp(UOps.IF, None, if_src),)), root.arg)
   return None
 
 expander = PatternMatcher([
