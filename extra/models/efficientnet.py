@@ -15,9 +15,9 @@ class MBConvBlock:
 
     self.strides = strides
     if strides == (2,2):
-      self.pad = [(kernel_size-1)//2-1, (kernel_size-1)//2]*2
+      self.pad = tuple([(kernel_size-1)//2-1, (kernel_size-1)//2]*2)
     else:
-      self.pad = [(kernel_size-1)//2]*4
+      self.pad = tuple([(kernel_size-1)//2]*4)
 
     self._depthwise_conv = Tensor.glorot_uniform(oup, 1, kernel_size, kernel_size)
     self._bn1 = BatchNorm2d(oup, track_running_stats=track_running_stats)
@@ -143,7 +143,7 @@ class EfficientNet:
       7: "https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/efficientnet-b7-dcc49843.pth"
     }
 
-    b0 = torch_load(fetch(model_urls[self.number]))
+    b0 = torch_load(str(fetch(model_urls[self.number])))
     for k,v in b0.items():
       if k.endswith("num_batches_tracked"): continue
       for cat in ['_conv_head', '_conv_stem', '_depthwise_conv', '_expand_conv', '_fc', '_project_conv', '_se_reduce', '_se_expand']:
