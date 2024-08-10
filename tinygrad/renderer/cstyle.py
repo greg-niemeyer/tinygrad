@@ -132,13 +132,8 @@ class CStyleLanguage(Renderer):
           depth += 1
         elif uop is UOps.ALU:
           # remove parens if ALU types are the same. TODO: can do more here
-          operands = []
-          for v in src:
-            if v.op is UOps.CONST:
-              if v.dtype and v.dtype not in [dtypes.float, dtypes.int, dtypes.bool]: operands.append(self.render_cast(r[v], v.dtype))
-              elif v.arg < 0: operands.append(f"({r[v]})")
-              else: operands.append(f"{r[v]}")
-            else: operands.append(f"{r[v]}")
+          operands = [self.render_cast(r[v], v.dtype) if v.op is UOps.CONST and v.dtype and v.dtype not in [dtypes.float, dtypes.int, dtypes.bool]
+                      else f"({r[v]})" if v.op is UOps.CONST and v.arg < 0 else f"{r[v]}" for v in src]
           if args in {BinaryOps.ADD,BinaryOps.MUL,BinaryOps.XOR}: operands = [strip_parens(operands[i]) if v.arg == args else operands[i] for i, v in enumerate(src)]
           val = self.code_for_op[args](*operands, dtype)
           assert child_count[u] != 0, f"childless ALU op found {u}"
