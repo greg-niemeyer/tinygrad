@@ -45,13 +45,12 @@ class CStyleLanguage(Renderer):
 
   # returns a str expression of the const with the given type
   def render_const(self, x:ConstType, dtype:DType) -> str:
-    if math.isnan(x): val = "NAN"
-    elif math.isinf(x): val = ("-" if x < 0 else "") + "INFINITY"
-    elif dtype == dtypes.bool: val = "1" if x else "0"
-    elif dtype == dtypes.float: val = f"{x}f"
-    elif dtype == dtypes.uint64: val = f"{x}ULL"
-    else: val = str(x)
-    return val if x >= 0 else f"({val})"
+    if math.isnan(x): return "NAN"
+    if math.isinf(x): return ("-" if x < 0 else "") + "INFINITY"
+    if dtype == dtypes.bool: return "1" if x else "0"
+    if dtype == dtypes.float: return f"{x}f"
+    if dtype == dtypes.uint64: return f"{x}ULL"
+    return str(x)
 
   # returns a str expression of the loaded value with the output type
   def render_load(self, output_dtype, buf_name, buf_dtype, idx, local=False) -> str:
@@ -133,8 +132,13 @@ class CStyleLanguage(Renderer):
           depth += 1
         elif uop is UOps.ALU:
           # remove parens if ALU types are the same. TODO: can do more here
-          operands = [self.render_cast(r[v], v.dtype)
-                      if v.op is UOps.CONST and v.dtype and v.dtype not in [dtypes.float, dtypes.int, dtypes.bool] else r[v] for v in src]
+          operands = []
+          for v in src:
+            if v.op is UOps.CONST:
+              if v.dtype and v.dtype not in [dtypes.float, dtypes.int, dtypes.bool]: operands.append(self.render_cast(r[v], v.dtype))
+              elif v.arg < 0: operands.append(f"({r[v]})")
+              else: operands.append(f"{r[v]}")
+            else: operands.append(f"{r[v]}")
           if args in {BinaryOps.ADD,BinaryOps.MUL,BinaryOps.XOR}: operands = [strip_parens(operands[i]) if v.arg == args else operands[i] for i, v in enumerate(src)]
           val = self.code_for_op[args](*operands, dtype)
           assert child_count[u] != 0, f"childless ALU op found {u}"
