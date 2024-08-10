@@ -133,9 +133,9 @@ class CStyleLanguage(Renderer):
           depth += 1
         elif uop is UOps.ALU:
           # remove parens if ALU types are the same. TODO: can do more here
-          if args in {BinaryOps.ADD,BinaryOps.MUL,BinaryOps.XOR}: operands = [strip_parens(r[v]) if v.arg == args else r[v]for v in src]
-          else: operands = [self.render_cast(r[v], v.dtype)
-                            if v.op is UOps.CONST and v.dtype and v.dtype not in [dtypes.float, dtypes.int, dtypes.bool] else r[v] for v in src]
+          operands = [self.render_cast(r[v], v.dtype)
+                      if v.op is UOps.CONST and v.dtype and v.dtype not in [dtypes.float, dtypes.int, dtypes.bool] else r[v] for v in src]
+          if args in {BinaryOps.ADD,BinaryOps.MUL,BinaryOps.XOR}: operands = [strip_parens(operands[i]) if v.arg == args else operands[i] for i, v in enumerate(src)]
           val = self.code_for_op[args](*operands, dtype)
           assert child_count[u] != 0, f"childless ALU op found {u}"
           # TODO: fix index rendering issue. fix clang nested max macro issue
