@@ -131,10 +131,10 @@ class CStyleLanguage(Renderer):
           kk(f"for (int {(expr := ssa('ridx',u))} = {r[src[0]]}; {expr} < {r[src[1]]}; {expr}++) {{")
           depth += 1
         elif uop is UOps.ALU:
-          # remove parens if ALU types are the same. TODO: can do more here
-          operands = [self.render_cast(r[v], v.dtype) if v.op is UOps.CONST and v.dtype and v.dtype not in [dtypes.float, dtypes.int, dtypes.bool]
+          operands = [self.render_cast(r[v], v.dtype) if v.op is UOps.CONST and v.dtype and v.dtype not in {dtypes.float, dtypes.int, dtypes.bool}
                       else f"({r[v]})" if v.op is UOps.CONST and v.arg < 0 else f"{r[v]}" for v in src]
-          if args in {BinaryOps.ADD,BinaryOps.MUL,BinaryOps.XOR}: operands = [strip_parens(operands[i]) if v.arg == args else operands[i] for i, v in enumerate(src)]
+          # remove parens if ALU types are the same. TODO: can do more here
+          if args in {BinaryOps.ADD,BinaryOps.MUL,BinaryOps.XOR}: operands = [strip_parens(o) if v.arg == args else o for o, v in zip(operands, src)]
           val = self.code_for_op[args](*operands, dtype)
           assert child_count[u] != 0, f"childless ALU op found {u}"
           # TODO: fix index rendering issue. fix clang nested max macro issue
