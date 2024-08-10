@@ -389,7 +389,7 @@ class TestSymbolic(unittest.TestCase):
     lidx1 = Variable("lidx1", 0, 7)
     alu2 = -lidx0-lidx1
     self.helper_test_variable((((alu2+14)//(-32))+4), 4, 4, "4")
-    self.helper_test_variable(-(((alu2+14)//(-32))+4), -4, -4, "(-4)")
+    self.helper_test_variable(-(((alu2+14)//(-32))+4), -4, -4, "-4")
     self.helper_test_variable((((alu2+134)//(-32))+4), 0, 1, "((((-lidx0)+(-lidx1)+134)//(-32))+4)")
     self.helper_test_variable((((alu2+142)//(-32))+4), 0, 0, "0")
     self.helper_test_variable((((alu2+150)//(-32))+4), 0, 0, "0")
