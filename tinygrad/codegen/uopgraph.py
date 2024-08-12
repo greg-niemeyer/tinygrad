@@ -131,11 +131,6 @@ def div_folding(x:UOp, c:int) -> Optional[UOp]:
   if quo is None: return x.const(0) if rem is None else cast(UOp, div_folding(rem, div))//(c//div)
   return quo if rem is None else cast(UOp, div_folding(rem, div))//(c//div)+quo
 
-# ***** transcendental *****
-
-transcendental_folding = PatternMatcher([(UPat(UOps.ALU, dtype=TRANSCENDENTAL_SUPPORTED_DTYPES, src=(UPat(name="d"),), arg=k), cast(Callable, v))
-                                         for k,v in ((UnaryOps.EXP2, xexp2), (UnaryOps.LOG2, xlog2), (UnaryOps.SIN, xsin))])
-
 # ***** threefry *****
 
 def threefry2x32(x: UOp, seed: UOp):
@@ -501,9 +496,10 @@ class UOpGraph:
     # used by linearizer
     self._uops: Optional[List[UOp]] = None
     self.opts = opts
-    self.folder = constant_folder
-    if TRANSCENDENTAL >= 2 or (opts is not None and TRANSCENDENTAL >= 1 and opts.device in {"CLANG", "LLVM"}):
-      self.folder = self.folder + transcendental_folding
+    self.folder = constant_folder + \
+      PatternMatcher([(UPat(UOps.ALU, dtype=TRANSCENDENTAL_SUPPORTED_DTYPES, src=(UPat(name="d"),), arg=k), cast(Callable, v))
+        for k,v in ((UnaryOps.EXP2, xexp2), (UnaryOps.LOG2, xlog2), (UnaryOps.SIN, xsin)) if
+        (opts and opts.code_for_op and not opts.code_for_op[k]) or TRANSCENDENTAL >= 1])
 
   def __reduce__(self): return self.__class__, (self.sink, self.opts)
   def __iter__(self) -> Iterator[UOp]: return iter(self.uops)
