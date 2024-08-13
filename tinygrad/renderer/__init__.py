@@ -1,6 +1,7 @@
 from typing import Optional, List, Tuple, Dict, Any
 import functools
 from dataclasses import dataclass, field
+from tinygrad.ops import Op
 from tinygrad.helpers import to_function_name, dedup
 from tinygrad.codegen.uops import UOps, UOp, flops_mem
 from tinygrad.shape.symbolic import sym_infer, sint, Variable
@@ -83,3 +84,5 @@ class Renderer:
   extra_matcher: Any = None
 
   def render(self, name:str, uops:List[UOp]) -> str: raise NotImplementedError("needs a renderer")
+
+  def supports_op(self, op:Op) -> bool: return False

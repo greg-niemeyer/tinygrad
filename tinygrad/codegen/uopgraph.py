@@ -498,8 +498,8 @@ class UOpGraph:
     self.opts = opts
     self.folder = constant_folder + \
       PatternMatcher([(UPat(UOps.ALU, dtype=TRANSCENDENTAL_SUPPORTED_DTYPES, src=(UPat(name="d"),), arg=k), cast(Callable, v))
-        for k,v in ((UnaryOps.EXP2, xexp2), (UnaryOps.LOG2, xlog2), (UnaryOps.SIN, xsin)) if
-        (opts and opts.code_for_op and not opts.code_for_op[k]) or TRANSCENDENTAL >= 1])
+        for k,v in ((UnaryOps.EXP2, xexp2), (UnaryOps.LOG2, xlog2), (UnaryOps.SIN, xsin))
+          if (opts and not opts.supports_op(k)) or TRANSCENDENTAL >= 1])
 
   def __reduce__(self): return self.__class__, (self.sink, self.opts)
   def __iter__(self) -> Iterator[UOp]: return iter(self.uops)

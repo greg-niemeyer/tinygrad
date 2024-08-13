@@ -93,6 +93,8 @@ class PTXRenderer(Renderer):
   extra_matcher = ptx_matcher
   def __init__(self, arch:str, device="CUDA"): self.device, self.tensor_cores = device, PTXRenderer.tensor_cores if int(arch[3:]) >= 80 else []
 
+  def supports_op(self, op:Op) -> bool: return op in self.asm_for_op
+
   # language options
   kernel_prefix = """.version VERSION
 .target TARGET

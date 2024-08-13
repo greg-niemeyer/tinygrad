@@ -71,6 +71,9 @@ class LLVMRenderer(Renderer):
   has_local = False
   has_shared = False
   global_max = None
+  code_for_op = code_for_op
+
+  def supports_op(self, op:Op) -> bool: return op in self.code_for_op
 
   def render(self, name:str, uops:List[UOp]) -> str:
     # all llvm stuff goes into a module
