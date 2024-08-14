@@ -1167,6 +1167,50 @@ class TestLinearizer(unittest.TestCase):
         end_range = [i for i, x in enumerate(k.uops) if x.op is UOps.ENDRANGE][0]
         assert end_range < k.uops.index(u)
 
+  # same kernel as test_split_reduce_kernel_dim0 + SPLIT_REDUCEOP=0
+  def test_hand_coded_unsplit_kernel(self):
+    Tensor.manual_seed(0)
+    a = Tensor.rand(256, 255).realize()
+    ld = LazyOp(BufferOps.LOAD, (), MemBuffer(1, dtypes.float, ShapeTracker.from_shape((256, 255))))
+    x = LazyOp(ReduceOps.SUM, (ld,), (0, 1))
+    str = LazyOp(BufferOps.STORE, (x,), MemBuffer(0, dtypes.float, ShapeTracker.from_shape((1, 1))))
+    kop = LazyOp(MetaOps.KERNEL, (str,))
+    kernel = Kernel(kop).hand_coded_optimizations().linearize()
+    inbuf = a.lazydata.buffer
+    outbuf = Buffer(a.device, kop.src[0].arg.st.size, kop.src[0].arg.dtype).allocate()
+    f = CompiledRunner(kernel.to_program())
+    f.exec([outbuf, inbuf])
+    print(np.frombuffer(outbuf.as_buffer(), _to_np_dtype(dtypes.float)))
+
+  # same kernel as test_split_reduce_kernel_dim0
+  def test_hand_coded_split_kernel(self):
+    Tensor.manual_seed(0)
+    a = Tensor.rand(1, 255, 256).realize()
+    # TODO: figure out why from_shape doesn't work here
+    #ld_unused = LazyOp(BufferOps.LOAD, (), MemBuffer(1, dtypes.float, ShapeTracker.from_shape((1, 255, 256))))
+    ld_1 = LazyOp(BufferOps.LOAD, (), MemBuffer(1, dtypes.float, ShapeTracker(views=(View(
+      shape=(1, 255, 256), strides=(0, 1, 255), offset=0, mask=None, contiguous=False),))))
+    x_1 = LazyOp(ReduceOps.SUM, (ld_1,), (1,))
+    str_1 = LazyOp(BufferOps.STORE, (x_1,), MemBuffer(0, dtypes.float, ShapeTracker.from_shape((1, 1, 256))))
+    kop_1 = LazyOp(MetaOps.KERNEL, (str_1,))
+    kernel_1 = Kernel(kop_1).hand_coded_optimizations().linearize()
+    inbuf_1 = a.lazydata.buffer
+    outbuf_1 = Buffer(a.device, kop_1.src[0].arg.st.size, kop_1.src[0].arg.dtype).allocate()
+    f = CompiledRunner(kernel_1.to_program())
+    f.exec([outbuf_1, inbuf_1])
+    #print(np.frombuffer(outbuf_1.as_buffer(), _to_np_dtype(dtypes.float)))
+
+    inbuf_2 = outbuf_1
+    ld_2 = LazyOp(BufferOps.LOAD, (), MemBuffer(1, dtypes.float, ShapeTracker.from_shape((1, 1, 256))))
+    x_2 = LazyOp(ReduceOps.SUM, (ld_2,), (2,))
+    str_2 = LazyOp(BufferOps.STORE, (x_2,), MemBuffer(0, dtypes.float, ShapeTracker.from_shape((1, 1, 1))))
+    kop_2 = LazyOp(MetaOps.KERNEL, (str_2,))
+    kernel_2 = Kernel(kop_2).hand_coded_optimizations().linearize()
+    outbuf_2 = Buffer(a.device, kop_2.src[0].arg.st.size, kop_2.src[0].arg.dtype).allocate()
+    f = CompiledRunner(kernel_2.to_program())
+    f.exec([outbuf_2, inbuf_2])
+    print(np.frombuffer(outbuf_2.as_buffer(), _to_np_dtype(dtypes.float)))
+
   def test_grouped_dims(self):
     def _assert_grouped_dims(prefix, dims, max_sizes, reverse_dims, expected_sizes):
       idxs = get_grouped_dims(prefix, dims, max_sizes, reverse_dims)
