@@ -55,6 +55,9 @@ class Kernel:
   def __init__(self, ast:UOp, opts:Optional[Renderer]=None):
     if ast.op is UOps.SINK: self.ast = ast
 
+    self.split = next((Kernel(s) for s in self.ast.src if s.op is UOps.SINK), None)
+    if self.split: self.ast = UOp(UOps.SINK, src=tuple(s for s in self.ast.src if s.op is not UOps.SINK))
+
     self.opts = opts if opts is not None else Device[Device.DEFAULT].renderer
     try: uop_sts_map = verify_ast(self.ast)
     except AssertionError as e:
