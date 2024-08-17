@@ -1224,15 +1224,22 @@ class TestLinearizer(unittest.TestCase):
   def test_hand_coded_nested_kernel(self):
     Tensor.manual_seed(0)
     a = Tensor.rand(1, 255, 256).realize()
-    ld_1 = LazyOp(BufferOps.LOAD, (), MemBuffer(1, dtypes.float, ShapeTracker(views=(View(
-      shape=(1, 255, 256), strides=(0, 1, 255), offset=0, mask=None, contiguous=False),))))
-    x_1 = LazyOp(ReduceOps.SUM, (ld_1,), (1,))
-    str_1 = LazyOp(BufferOps.STORE, (x_1,), MemBuffer(0, dtypes.float, ShapeTracker.from_shape((1, 1, 256))))
-    kop_1 = LazyOp(MetaOps.KERNEL, (str_1,))
-    ld_2 = LazyOp(BufferOps.LOAD, (), MemBuffer(1, dtypes.float, ShapeTracker.from_shape((1, 1, 256))))
-    x_2 = LazyOp(ReduceOps.SUM, (ld_2,), (2,))
-    str_2 = LazyOp(BufferOps.STORE, (x_2,), MemBuffer(0, dtypes.float, ShapeTracker.from_shape((1, 1, 1))))
-    kop_2 = LazyOp(MetaOps.KERNEL, (str_2,))
+    g1 = UOp(UOps.DEFINE_GLOBAL, PtrDType(dtypes.float), arg=1) 
+    st1 = UOp(UOps.SHAPETRACKER, arg=ShapeTracker(views=(View(
+      shape=(1, 255, 256), strides=(0, 1, 255), offset=0, mask=None, contiguous=False),)))
+    load_1 = UOp(UOps.LOAD, dtypes.float, (g1, st1))
+    g2 = UOp(UOps.DEFINE_GLOBAL, PtrDType(dtypes.float), arg=0)
+    st2 = UOp(UOps.SHAPETRACKER, arg=ShapeTracker.from_shape((1, 1, 256)))
+    r_1 = UOp(UOps.REDUCE_AXIS, dtypes.float, (load_1,), (ReduceOps.SUM, (1,)))
+    store_1 = UOp(UOps.STORE, src=(g2, st2, r_1,))
+    sink_1 = UOp(UOps.SINK, src=(store_1,))
+
+    load_2 = UOp(UOps.LOAD, dtypes.float, (g1, st2))
+    st3 = UOp(UOps.SHAPETRACKER, arg=ShapeTracker.from_shape((1, 1, 1)))
+    r_2 = UOp(UOps.REDUCE_AXIS, dtypes.float, (load_2,), (ReduceOps.SUM, (2,)))
+    store_2 = UOp(UOps.STORE, dtypes.float, (g2, st3, r_2,))
+    sink_2 = UOp(UOps.SINK, src=(store_2, sink_1))
+    kernel_2 = Kernel(sink_2).hand_coded_optimizations().linearize()
 
   def test_grouped_dims(self):
     def _assert_grouped_dims(prefix, dims, max_sizes, reverse_dims, expected_sizes):
