@@ -790,11 +790,10 @@ def _assert_valid_uop(uop:UOp, st:ShapeTracker, sts:Dict[UOp, ShapeTracker]) -> 
         raise AssertionError(f"found implicit expand {x.op} {sts[x].shape} != {op} {st.shape} {prod(sts[x].shape)} != {prod(st.shape)}")
   sts[uop] = st
 
-def verify_ast(ast:UOp) -> Dict[UOp, ShapeTracker]:
-  assert ast.op is UOps.SINK and all(x.op is UOps.STORE for x in ast.src), "must be SINK"
-  assert len(set(x.st_arg.size for x in ast.src)) == 1, "outputs must be exactly the same size"
-  sts: Dict[UOp, ShapeTracker] = {}
-  for out in ast.src: _assert_valid_uop(out, out.st_arg, sts)
+def verify_ast(ast:UOp, sts:Dict[UOp, ShapeTracker]={}) -> Dict[UOp, ShapeTracker]:
+  assert ast.op is UOps.SINK and all(x.op in {UOps.STORE, UOps.SINK} for x in ast.src), "must be SINK"
+  assert len(set(x.st_arg.size for x in ast.src if x.op is UOps.STORE)) == 1, "outputs must be exactly the same size"
+  for out in ast.src: _assert_valid_uop(out, out.st_arg, sts) if out.op is UOps.STORE else verify_ast(out, sts)
   shape_dims = [sorted(dedup(dims)) for dims in zip(*[x.shape for x in sts.values()])]
   assert all(len(x) == 1 or (len(x) == 2 and x[0] == 1) for x in shape_dims), f"shapes must have either 1 or n in each dimension, {shape_dims}"
   type_verify(list(sts))
