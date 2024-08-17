@@ -1211,6 +1211,20 @@ class TestLinearizer(unittest.TestCase):
     f.exec([outbuf_2, inbuf_2])
     print(np.frombuffer(outbuf_2.as_buffer(), _to_np_dtype(dtypes.float)))
 
+  # new nested kernel for test_split_reduce_kernel_dim0
+  def test_hand_coded_nested_kernel(self):
+    Tensor.manual_seed(0)
+    a = Tensor.rand(1, 255, 256).realize()
+    ld_1 = LazyOp(BufferOps.LOAD, (), MemBuffer(1, dtypes.float, ShapeTracker(views=(View(
+      shape=(1, 255, 256), strides=(0, 1, 255), offset=0, mask=None, contiguous=False),))))
+    x_1 = LazyOp(ReduceOps.SUM, (ld_1,), (1,))
+    str_1 = LazyOp(BufferOps.STORE, (x_1,), MemBuffer(0, dtypes.float, ShapeTracker.from_shape((1, 1, 256))))
+    kop_1 = LazyOp(MetaOps.KERNEL, (str_1,))
+    ld_2 = LazyOp(BufferOps.LOAD, (), MemBuffer(1, dtypes.float, ShapeTracker.from_shape((1, 1, 256))))
+    x_2 = LazyOp(ReduceOps.SUM, (ld_2,), (2,))
+    str_2 = LazyOp(BufferOps.STORE, (x_2,), MemBuffer(0, dtypes.float, ShapeTracker.from_shape((1, 1, 1))))
+    kop_2 = LazyOp(MetaOps.KERNEL, (str_2,))
+
   def test_grouped_dims(self):
     def _assert_grouped_dims(prefix, dims, max_sizes, reverse_dims, expected_sizes):
       idxs = get_grouped_dims(prefix, dims, max_sizes, reverse_dims)
