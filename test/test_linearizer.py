@@ -1240,6 +1240,17 @@ class TestLinearizer(unittest.TestCase):
     store_2 = UOp(UOps.STORE, dtypes.float, (g2, st3, r_2,))
     sink_2 = UOp(UOps.SINK, src=(store_2, sink_1))
     kernel_2 = Kernel(sink_2).hand_coded_optimizations().linearize()
+    kernel_1 = kernel_2.split.hand_coded_optimizations().linearize()
+
+    inbuf_1 = a.lazydata.buffer
+    outbuf_1 = Buffer(a.device, store_1.st_arg.size, g2.dtype).allocate()
+    f = CompiledRunner(kernel_1.to_program())
+    f.exec([outbuf_1, inbuf_1])
+    inbuf_2 = outbuf_1
+    outbuf_2 = Buffer(a.device, store_2.st_arg.size, g2.dtype).allocate()
+    f = CompiledRunner(kernel_2.to_program())
+    f.exec([outbuf_2, inbuf_2])
+    print(np.frombuffer(outbuf_2.as_buffer(), _to_np_dtype(dtypes.float)))
 
   def test_grouped_dims(self):
     def _assert_grouped_dims(prefix, dims, max_sizes, reverse_dims, expected_sizes):
