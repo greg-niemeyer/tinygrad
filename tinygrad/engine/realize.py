@@ -147,18 +147,21 @@ class BufferXfer(BufferCopy):
 # **************** method cache ****************
 
 method_cache: Dict[Tuple[str, bytes, int, int, bool], CompiledRunner] = {}
-def get_runner(dname:str, ast:UOp) -> CompiledRunner:
+def get_runners(dname:str, ast:UOp) -> List[CompiledRunner]:
   ckey = (dname, ast.key, BEAM.value, NOOPT.value, False)
   if cret:=method_cache.get(ckey): return cret
   bkey = (dname.split(":")[0], ast.key, BEAM.value, NOOPT.value, True)
-  if bret:=method_cache.get(bkey):
-    method_cache[ckey] = ret = CompiledRunner(replace(bret.p, dname=dname), bret.lib)
+  if bretl:=method_cache.get(bkey):
+    method_cache[ckey] = ret = [CompiledRunner(replace(bret.p, dname=dname), bret.lib) for bret in bretl]
   else:
-    prg: Program = get_kernel(Device[dname].renderer, ast).to_program()
+    k = get_kernel(Device[dname].renderer, ast)
+    if k.split: split_prg: Program = k.split.to_program()
+    prg: Program = k.to_program()
     if getenv("FUZZ_UOPS"):
       from test.external.fuzz_uops import UOpsFuzzerRunner
       return UOpsFuzzerRunner(replace(prg, dname=dname))
-    method_cache[ckey] = method_cache[bkey] = ret = CompiledRunner(replace(prg, dname=dname))
+    split_runner = [CompiledRunner(replace(split_prg, dname=dname))] if k.split else []
+    method_cache[ckey] = method_cache[bkey] = ret = split_runner + [CompiledRunner(replace(prg, dname=dname))]
   return ret
 
 # **************** lowering functions ****************
@@ -189,8 +192,8 @@ class ExecItem:
 def lower_schedule_item(si:ScheduleItem) -> List[ExecItem]:
   assert len(set(x.device for x in si.bufs)) == 1 or (si.ast.op is UOps.EXT and si.ast.arg[0] is MetaOps.COPY)
   if si.ast.op is UOps.SINK:
-    runner = get_runner(si.outputs[0].device, si.ast)
-    return [ExecItem(runner, [si.bufs[x] for x in runner.p.globals], si.metadata)]
+    runners = get_runners(si.outputs[0].device, si.ast)
+    return [ExecItem(runner, [si.bufs[x] for x in runner.p.globals], si.metadata) for runner in runners]
   out, (op, arg) = si.outputs[0], si.ast.arg
   if op is MetaOps.COPY:
     kernel_type = BufferCopy
