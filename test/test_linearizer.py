@@ -1171,17 +1171,16 @@ class TestLinearizer(unittest.TestCase):
   def test_hand_coded_unsplit_kernel(self):
     Tensor.manual_seed(0)
     a = Tensor.rand(256, 255).realize()
-    g1 = UOp(UOps.DEFINE_GLOBAL, PtrDType(dtypes.float), arg=1) 
+    g0, g1 = [UOp(UOps.DEFINE_GLOBAL, PtrDType(dtypes.float), arg=i) for i in range(2)]
     st1 = UOp(UOps.SHAPETRACKER, arg=ShapeTracker.from_shape((256, 255)))
     load = UOp(UOps.LOAD, dtypes.float, (g1, st1))
-    g2 = UOp(UOps.DEFINE_GLOBAL, PtrDType(dtypes.float), arg=0)
     st2 = UOp(UOps.SHAPETRACKER, arg=ShapeTracker.from_shape((1, 1)))
     r = UOp(UOps.REDUCE_AXIS, dtypes.float, (load,), (ReduceOps.SUM, (0, 1)))
-    store = UOp(UOps.STORE, src=(g2, st2, r))
+    store = UOp(UOps.STORE, src=(g0, st2, r))
     sink = UOp(UOps.SINK, src=(store,))
     kernel = Kernel(sink).hand_coded_optimizations()
     inbuf = a.lazydata.buffer
-    outbuf = Buffer(a.device, store.st_arg.size, g2.dtype).allocate()
+    outbuf = Buffer(a.device, store.st_arg.size, g0.dtype).allocate()
     f = CompiledRunner(kernel.to_program())
     f.exec([outbuf, inbuf])
     print(np.frombuffer(outbuf.as_buffer(), _to_np_dtype(dtypes.float)))
@@ -1192,30 +1191,29 @@ class TestLinearizer(unittest.TestCase):
     a = Tensor.rand(1, 255, 256).realize()
     # TODO: figure out why from_shape doesn't work here
     #ld_unused = LazyOp(BufferOps.LOAD, (), MemBuffer(1, dtypes.float, ShapeTracker.from_shape((1, 255, 256))))
-    g1 = UOp(UOps.DEFINE_GLOBAL, PtrDType(dtypes.float), arg=1) 
+    g0, g1 = [UOp(UOps.DEFINE_GLOBAL, PtrDType(dtypes.float), arg=i) for i in range(2)]
     st1 = UOp(UOps.SHAPETRACKER, arg=ShapeTracker(views=(View(
       shape=(1, 255, 256), strides=(0, 1, 255), offset=0, mask=None, contiguous=False),)))
     load_1 = UOp(UOps.LOAD, dtypes.float, (g1, st1))
-    g2 = UOp(UOps.DEFINE_GLOBAL, PtrDType(dtypes.float), arg=0)
     st2 = UOp(UOps.SHAPETRACKER, arg=ShapeTracker.from_shape((1, 1, 256)))
     r_1 = UOp(UOps.REDUCE_AXIS, dtypes.float, (load_1,), (ReduceOps.SUM, (1,)))
-    store_1 = UOp(UOps.STORE, src=(g2, st2, r_1,))
+    store_1 = UOp(UOps.STORE, src=(g0, st2, r_1,))
     sink_1 = UOp(UOps.SINK, src=(store_1,))
     kernel_1 = Kernel(sink_1).hand_coded_optimizations()
     inbuf_1 = a.lazydata.buffer
-    outbuf_1 = Buffer(a.device, store_1.st_arg.size, g2.dtype).allocate()
+    outbuf_1 = Buffer(a.device, store_1.st_arg.size, g0.dtype).allocate()
     f = CompiledRunner(kernel_1.to_program())
     f.exec([outbuf_1, inbuf_1])
     #print(np.frombuffer(outbuf_1.as_buffer(), _to_np_dtype(dtypes.float)))
 
     inbuf_2 = outbuf_1
-    load_2 = UOp(UOps.LOAD, dtypes.float, (g1, st2)) 
+    load_2 = UOp(UOps.LOAD, dtypes.float, (g0, st2)) 
     st3 = UOp(UOps.SHAPETRACKER, arg=ShapeTracker.from_shape((1, 1, 1)))
     r_2 = UOp(UOps.REDUCE_AXIS, dtypes.float, (load_2,), (ReduceOps.SUM, (2,)))
-    store_2 = UOp(UOps.STORE, dtypes.float, (g2, st3, r_2,))
+    store_2 = UOp(UOps.STORE, src=(g0, st3, r_2,))
     sink_2 = UOp(UOps.SINK, src=(store_2,))
     kernel_2 = Kernel(sink_2).hand_coded_optimizations().linearize()
-    outbuf_2 = Buffer(a.device, store_2.st_arg.size, g2.dtype).allocate()
+    outbuf_2 = Buffer(a.device, store_2.st_arg.size, g0.dtype).allocate()
     f = CompiledRunner(kernel_2.to_program())
     f.exec([outbuf_2, inbuf_2])
     print(np.frombuffer(outbuf_2.as_buffer(), _to_np_dtype(dtypes.float)))
@@ -1224,30 +1222,29 @@ class TestLinearizer(unittest.TestCase):
   def test_hand_coded_nested_kernel(self):
     Tensor.manual_seed(0)
     a = Tensor.rand(1, 255, 256).realize()
-    g1 = UOp(UOps.DEFINE_GLOBAL, PtrDType(dtypes.float), arg=1) 
+    g0, g1 = [UOp(UOps.DEFINE_GLOBAL, PtrDType(dtypes.float), arg=i) for i in range(2)]
     st1 = UOp(UOps.SHAPETRACKER, arg=ShapeTracker(views=(View(
       shape=(1, 255, 256), strides=(0, 1, 255), offset=0, mask=None, contiguous=False),)))
     load_1 = UOp(UOps.LOAD, dtypes.float, (g1, st1))
-    g2 = UOp(UOps.DEFINE_GLOBAL, PtrDType(dtypes.float), arg=0)
     st2 = UOp(UOps.SHAPETRACKER, arg=ShapeTracker.from_shape((1, 1, 256)))
     r_1 = UOp(UOps.REDUCE_AXIS, dtypes.float, (load_1,), (ReduceOps.SUM, (1,)))
-    store_1 = UOp(UOps.STORE, src=(g2, st2, r_1,))
+    store_1 = UOp(UOps.STORE, src=(g0, st2, r_1,))
     sink_1 = UOp(UOps.SINK, src=(store_1,))
 
     load_2 = UOp(UOps.LOAD, dtypes.float, (g1, st2))
     st3 = UOp(UOps.SHAPETRACKER, arg=ShapeTracker.from_shape((1, 1, 1)))
     r_2 = UOp(UOps.REDUCE_AXIS, dtypes.float, (load_2,), (ReduceOps.SUM, (2,)))
-    store_2 = UOp(UOps.STORE, dtypes.float, (g2, st3, r_2,))
+    store_2 = UOp(UOps.STORE, src=(g0, st3, r_2,))
     sink_2 = UOp(UOps.SINK, src=(store_2, sink_1))
     kernel_2 = Kernel(sink_2).hand_coded_optimizations().linearize()
     kernel_1 = kernel_2.split.hand_coded_optimizations().linearize()
 
     inbuf_1 = a.lazydata.buffer
-    outbuf_1 = Buffer(a.device, store_1.st_arg.size, g2.dtype).allocate()
+    outbuf_1 = Buffer(a.device, store_1.st_arg.size, g0.dtype).allocate()
     f = CompiledRunner(kernel_1.to_program())
     f.exec([outbuf_1, inbuf_1])
     inbuf_2 = outbuf_1
-    outbuf_2 = Buffer(a.device, store_2.st_arg.size, g2.dtype).allocate()
+    outbuf_2 = Buffer(a.device, store_2.st_arg.size, g0.dtype).allocate()
     f = CompiledRunner(kernel_2.to_program())
     f.exec([outbuf_2, inbuf_2])
     print(np.frombuffer(outbuf_2.as_buffer(), _to_np_dtype(dtypes.float)))
