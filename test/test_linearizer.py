@@ -1207,7 +1207,7 @@ class TestLinearizer(unittest.TestCase):
     #print(np.frombuffer(outbuf_1.as_buffer(), _to_np_dtype(dtypes.float)))
 
     inbuf_2 = outbuf_1
-    load_2 = UOp(UOps.LOAD, dtypes.float, (g0, st2)) 
+    load_2 = UOp(UOps.LOAD, dtypes.float, (g1, st2))
     st3 = UOp(UOps.SHAPETRACKER, arg=ShapeTracker.from_shape((1, 1, 1)))
     r_2 = UOp(UOps.REDUCE_AXIS, dtypes.float, (load_2,), (ReduceOps.SUM, (2,)))
     store_2 = UOp(UOps.STORE, src=(g0, st3, r_2,))
