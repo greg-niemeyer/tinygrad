@@ -13,7 +13,7 @@ if __name__ == "__main__":
   if os.path.isfile("/tmp/policynet.safetensors"): load_state_dict(net, safe_load("/tmp/policynet.safetensors"))
   optim = Adam(get_parameters(net))
 
-  ast_strs = load_worlds()
+  ast_strs = load_worlds(filter_reduce=False, filter_novariable=False)
 
   # select a world
   all_feats, all_acts, all_rews = [], [], []

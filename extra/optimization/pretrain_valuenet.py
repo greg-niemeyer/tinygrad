@@ -8,8 +8,8 @@ from tinygrad.nn.optim import Adam
 from tinygrad.nn.state import get_parameters, get_state_dict, safe_save, safe_load, load_state_dict
 
 # stuff needed to unpack a kernel
-from tinygrad.ops import LazyOp, TernaryOps, BinaryOps, UnaryOps, ReduceOps, BufferOps, MemBuffer, ConstBuffer
-from tinygrad.dtype import dtypes
+from tinygrad.ops import UOp, UOps, TernaryOps, BinaryOps, UnaryOps
+from tinygrad.dtype import dtypes, PtrDType
 from tinygrad.shape.shapetracker import ShapeTracker
 from tinygrad.shape.view import View
 from tinygrad.shape.symbolic import Variable
