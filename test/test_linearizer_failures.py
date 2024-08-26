@@ -1197,5 +1197,29 @@ class TestLinearizerFailures(unittest.TestCase):
     opts = [Opt(op=OptOps.UPCAST, axis=1, amt=2)]
     helper_test_lin(Kernel(ast, opts=Device[Device.DEFAULT].renderer), opts=opts, failed_platforms=[])
 
+  # PYTHONPATH=. METAL=1 FUZZ_ALL_ACTIONS=1 DEPTH=1 FUZZ_N=100 FUZZ_NTH=8 python3 ./test/external/fuzz_linearizer.py
+  def test_failure_51(self):
+    ast = UOp(UOps.SINK, None, arg=None, src=(
+      UOp(UOps.STORE, None, arg=None, src=(
+        UOp(UOps.DEFINE_GLOBAL, PtrDType(dtypes.float), arg=0, src=()),
+        UOp(UOps.SHAPETRACKER, None, arg=ShapeTracker(views=(View(shape=(2, 6, 2, 1), strides=(12, 2, 1, 0), offset=0, mask=None, contiguous=True),)), src=()),
+        UOp(UOps.REDUCE_AXIS, dtypes.float, arg=(BinaryOps.ADD, (3,)), src=(
+          UOp(UOps.ALU, dtypes.float, arg=UnaryOps.EXP2, src=(
+            UOp(UOps.ALU, dtypes.float, arg=BinaryOps.MUL, src=(
+              UOp(UOps.ALU, dtypes.float, arg=BinaryOps.ADD, src=(
+                UOp(UOps.LOAD, dtypes.float, arg=None, src=(
+                  UOp(UOps.DEFINE_GLOBAL, PtrDType(dtypes.float), arg=1, src=()),
+                  UOp(UOps.SHAPETRACKER, None, arg=ShapeTracker(views=(View(shape=(2, 6, 2, 1500), strides=(18000, 3000, 1500, 1), offset=0, mask=None, contiguous=True),)), src=()),)),
+                UOp(UOps.ALU, dtypes.float, arg=BinaryOps.MUL, src=(
+                  UOp(UOps.LOAD, dtypes.float, arg=None, src=(
+                    UOp(UOps.DEFINE_GLOBAL, PtrDType(dtypes.float), arg=2, src=()),
+                    UOp(UOps.SHAPETRACKER, None, arg=ShapeTracker(views=(View(shape=(2, 6, 2, 1500), strides=(12, 2, 1, 0), offset=0, mask=None, contiguous=False),)), src=()),)),
+                  UOp(UOps.CONST, dtypes.float, arg=-1.0, src=(
+                    UOp(UOps.SHAPETRACKER, None, arg=ShapeTracker(views=(View(shape=(2, 6, 2, 1500), strides=(0, 0, 0, 0), offset=0, mask=None, contiguous=False),)), src=()),)),)),)),
+              UOp(UOps.CONST, dtypes.float, arg=1.4426950408889634, src=(
+                UOp(UOps.SHAPETRACKER, None, arg=ShapeTracker(views=(View(shape=(2, 6, 2, 1500), strides=(0, 0, 0, 0), offset=0, mask=None, contiguous=False),)), src=()),)),)),)),)),)),))
+    opts = [Opt(op=OptOps.PADTO, axis=1, amt=32)]
+    helper_test_lin(Kernel(ast), opts=opts, failed_platforms=[])
+
 if __name__ == '__main__':
   unittest.main()
